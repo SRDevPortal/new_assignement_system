@@ -1,0 +1,144 @@
+{
+ "actions": [],
+ "creation": "2026-06-08 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "lead",
+  "event_type",
+  "status",
+  "priority",
+  "rule",
+  "attempts",
+  "next_retry_at",
+  "locked_section",
+  "locked_by",
+  "locked_at",
+  "metadata_hash",
+  "metadata_snapshot",
+  "error_section",
+  "error"
+ ],
+ "fields": [
+  {
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Lead",
+   "options": "CRM Lead",
+   "reqd": 1
+  },
+  {
+   "default": "Insert",
+   "fieldname": "event_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Event Type",
+   "options": "Insert\nUpdate\nManual\nBulk\nReassign\nStale\nRepair\nUnassign"
+  },
+  {
+   "default": "Pending",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Pending\nProcessing\nAssigned\nSkipped\nFailed\nRetry\nCancelled"
+  },
+  {
+   "default": "100",
+   "fieldname": "priority",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Priority"
+  },
+  {
+   "fieldname": "rule",
+   "fieldtype": "Link",
+   "label": "Rule",
+   "options": "New Assignement System Rule"
+  },
+  {
+   "default": "0",
+   "fieldname": "attempts",
+   "fieldtype": "Int",
+   "label": "Attempts"
+  },
+  {
+   "fieldname": "next_retry_at",
+   "fieldtype": "Datetime",
+   "in_standard_filter": 1,
+   "label": "Next Retry At"
+  },
+  {
+   "fieldname": "locked_section",
+   "fieldtype": "Section Break",
+   "label": "Lock"
+  },
+  {
+   "fieldname": "locked_by",
+   "fieldtype": "Data",
+   "label": "Locked By"
+  },
+  {
+   "fieldname": "locked_at",
+   "fieldtype": "Datetime",
+   "label": "Locked At"
+  },
+  {
+   "fieldname": "metadata_hash",
+   "fieldtype": "Data",
+   "label": "Metadata Hash"
+  },
+  {
+   "fieldname": "metadata_snapshot",
+   "fieldtype": "JSON",
+   "label": "Metadata Snapshot"
+  },
+  {
+   "fieldname": "error_section",
+   "fieldtype": "Section Break",
+   "label": "Error"
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Error"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-08 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "New Assignement System",
+ "name": "New Assignement System Queue",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager"
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "lead,status,event_type",
+ "sort_field": "creation",
+ "sort_order": "ASC",
+ "states": [],
+ "track_changes": 1
+}

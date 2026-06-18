@@ -1,0 +1,65 @@
+[project]
+name = "new_assignement_system"
+dynamic = ["version"]
+description = "Session-based CRM Lead assignment system"
+authors = [
+    { name = "SRIAAS", email = "webdevelopersriaas@gmail.com" }
+]
+
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+    # "frappe~=15.0.0"  # Installed and managed by bench
+]
+
+[build-system]
+requires = ["flit_core >=3.4,<4"]
+build-backend = "flit_core.buildapi"
+
+# Frappe compatibility requirement
+[tool.bench.frappe-dependencies]
+frappe = ">=15.0.0,<16.0.0"
+
+# These dependencies are only installed when developer mode is enabled
+[tool.bench.dev-dependencies]
+# package_name = "~=1.1.0"
+
+# Ruff configuration for linting
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "F",
+    "E",
+    "W",
+    "I",
+    "UP",
+    "B",
+    "RUF"
+]
+
+ignore = [
+    "B017", # assertRaises(Exception) - should be more specific
+    "B018", # useless expression
+    "B023", # loop variable binding issue
+    "B904", # raise inside except without from
+    "E101", # mixed spaces and tabs
+    "E402", # import not at top
+    "E501", # line too long
+    "E741", # ambiguous variable name
+    "F401", # unused imports
+    "F403", # import *
+    "F405", # import * undefined
+    "F722", # syntax error in annotation
+    "W191"  # tabs indentation
+]
+
+typing-modules = ["frappe.types.DF"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "tab"
+docstring-code-format = true

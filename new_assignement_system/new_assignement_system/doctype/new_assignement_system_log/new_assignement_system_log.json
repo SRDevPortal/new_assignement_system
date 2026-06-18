@@ -1,0 +1,141 @@
+{
+ "actions": [],
+ "creation": "2026-06-08 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "lead",
+  "action",
+  "status",
+  "old_owner",
+  "new_owner",
+  "team",
+  "rule",
+  "strategy",
+  "queue",
+  "triggered_by",
+  "reason",
+  "metadata_snapshot",
+  "error"
+ ],
+ "fields": [
+  {
+   "fieldname": "lead",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Lead",
+   "options": "CRM Lead",
+   "reqd": 1
+  },
+  {
+   "fieldname": "action",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Action",
+   "options": "Assigned\nReassigned\nUnassigned\nSkipped\nFailed",
+   "reqd": 1
+  },
+  {
+   "default": "Success",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Success\nFailed"
+  },
+  {
+   "fieldname": "old_owner",
+   "fieldtype": "Link",
+   "label": "Old Owner",
+   "options": "User"
+  },
+  {
+   "fieldname": "new_owner",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "New Owner",
+   "options": "User"
+  },
+  {
+   "fieldname": "team",
+   "fieldtype": "Link",
+   "label": "Team",
+   "options": "Team"
+  },
+  {
+   "fieldname": "rule",
+   "fieldtype": "Link",
+   "label": "Rule",
+   "options": "New Assignement System Rule"
+  },
+  {
+   "fieldname": "strategy",
+   "fieldtype": "Data",
+   "label": "Strategy"
+  },
+  {
+   "fieldname": "queue",
+   "fieldtype": "Link",
+   "label": "Queue",
+   "options": "New Assignement System Queue"
+  },
+  {
+   "fieldname": "triggered_by",
+   "fieldtype": "Data",
+   "label": "Triggered By"
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Small Text",
+   "label": "Reason"
+  },
+  {
+   "fieldname": "metadata_snapshot",
+   "fieldtype": "JSON",
+   "label": "Metadata Snapshot"
+  },
+  {
+   "fieldname": "error",
+   "fieldtype": "Small Text",
+   "label": "Error"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-06-08 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "New Assignement System",
+ "name": "New Assignement System Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "read": 1,
+   "report": 1,
+   "role": "Sales Manager"
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "lead,new_owner,action,rule",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}
+

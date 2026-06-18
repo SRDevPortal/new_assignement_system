@@ -1,0 +1,245 @@
+{
+    "actions":  [
+
+                ],
+    "creation":  "2026-06-08 12:00:00.000000",
+    "doctype":  "DocType",
+    "editable_grid":  1,
+    "engine":  "InnoDB",
+    "field_order":  [
+                        "step_1_system_status_section",
+                        "enabled",
+                        "disable_manual_assign_to",
+                        "step_2_new_lead_assignment_section",
+                        "auto_assign_on_insert",
+                        "inline_assign_on_insert",
+                        "override_api_owner_when_rule_matches",
+                        "step_3_rule_matching_section",
+                        "enable_metadata_based_assignment",
+                        "default_strategy",
+                        "fallback_user",
+                        "allow_fallback_without_active_session",
+                        "step_4_update_handling_section",
+                        "auto_reassign_on_update",
+                        "auto_unassign_on_update",
+                        "stale_reassignment_enabled",
+                        "stale_after_minutes",
+                        "step_5_assignment_sync_section",
+                        "sync_todo",
+                        "sync_docshare",
+                        "notify_manual_assign",
+                        "step_6_background_queue_section",
+                        "queue_enabled",
+                        "default_queue",
+                        "bulk_queue",
+                        "scheduler_queue",
+                        "bulk_inline_limit",
+                        "queue_batch_size"
+                    ],
+    "fields":  [
+                   {
+                       "fieldname":  "step_1_system_status_section",
+                       "fieldtype":  "Section Break",
+                       "label":  "Step 1: System Status"
+                   },
+                   {
+                       "default":  "1",
+                       "fieldname":  "enabled",
+                       "fieldtype":  "Check",
+                       "label":  "Enabled"
+                   },
+                   {
+                       "default":  "1",
+                       "fieldname":  "disable_manual_assign_to",
+                       "fieldtype":  "Check",
+                       "label":  "Disable Native Assign To UI"
+                   },
+                   {
+                       "fieldname":  "step_2_new_lead_assignment_section",
+                       "fieldtype":  "Section Break",
+                       "label":  "Step 2: New Lead Assignment"
+                   },
+                   {
+                       "default":  "1",
+                       "fieldname":  "auto_assign_on_insert",
+                       "fieldtype":  "Check",
+                       "label":  "Assign New Leads Automatically"
+                   },
+                   {
+                       "default":  "1",
+                       "description":  "Assign matching insert leads inside the create request instead of waiting for the background queue.",
+                       "fieldname":  "inline_assign_on_insert",
+                       "fieldtype":  "Check",
+                       "label":  "Assign Immediately On Lead Creation"
+                   },
+                   {
+                       "default":  "0",
+                       "description":  "When enabled, a matching assignment rule can replace a lead_owner supplied during API lead creation.",
+                       "fieldname":  "override_api_owner_when_rule_matches",
+                       "fieldtype":  "Check",
+                       "label":  "Override API Owner When Rule Matches"
+                   },
+                   {
+                       "fieldname":  "step_3_rule_matching_section",
+                       "fieldtype":  "Section Break",
+                       "label":  "Step 3: Rule Matching And Fallback"
+                   },
+                   {
+                       "default":  "0",
+                       "description":  "When enabled, rule Metadata Filters are used for field-wise lead matching.",
+                       "fieldname":  "enable_metadata_based_assignment",
+                       "fieldtype":  "Check",
+                       "label":  "Enable Metadata Based Assignment"
+                   },
+                   {
+                       "default":  "Balanced Load",
+                       "fieldname":  "default_strategy",
+                       "fieldtype":  "Select",
+                       "label":  "Default Strategy",
+                       "options":  "Round Robin\nBalanced Load\nWeighted Balanced\nSkill Based"
+                   },
+                   {
+                       "fieldname":  "fallback_user",
+                       "fieldtype":  "Link",
+                       "label":  "Fallback User",
+                       "options":  "User"
+                   },
+                   {
+                       "default":  "0",
+                       "description":  "When disabled, fallback users are also required to have an active session.",
+                       "fieldname":  "allow_fallback_without_active_session",
+                       "fieldtype":  "Check",
+                       "label":  "Allow Fallback Without Active Session"
+                   },
+                   {
+                       "fieldname":  "step_4_update_handling_section",
+                       "fieldtype":  "Section Break",
+                       "label":  "Step 4: Lead Update Handling"
+                   },
+                   {
+                       "default":  "0",
+                       "fieldname":  "auto_reassign_on_update",
+                       "fieldtype":  "Check",
+                       "label":  "Auto Reassign On Update"
+                   },
+                   {
+                       "default":  "1",
+                       "description":  "Evaluate rule unassign conditions when CRM Lead metadata/status changes.",
+                       "fieldname":  "auto_unassign_on_update",
+                       "fieldtype":  "Check",
+                       "label":  "Auto Unassign On Update"
+                   },
+                   {
+                       "default":  "0",
+                       "fieldname":  "stale_reassignment_enabled",
+                       "fieldtype":  "Check",
+                       "label":  "Stale Reassignment Enabled"
+                   },
+                   {
+                       "default":  "120",
+                       "fieldname":  "stale_after_minutes",
+                       "fieldtype":  "Int",
+                       "label":  "Stale After Minutes"
+                   },
+                   {
+                       "fieldname":  "step_5_assignment_sync_section",
+                       "fieldtype":  "Section Break",
+                       "label":  "Step 5: Assignment Sync"
+                   },
+                   {
+                       "default":  "1",
+                       "fieldname":  "sync_todo",
+                       "fieldtype":  "Check",
+                       "label":  "Sync ToDo"
+                   },
+                   {
+                       "default":  "1",
+                       "fieldname":  "sync_docshare",
+                       "fieldtype":  "Check",
+                       "label":  "Sync DocShare"
+                   },
+                   {
+                       "default":  "0",
+                       "fieldname":  "notify_manual_assign",
+                       "fieldtype":  "Check",
+                       "label":  "Notify Manual Assignments"
+                   },
+                   {
+                       "fieldname":  "step_6_background_queue_section",
+                       "fieldtype":  "Section Break",
+                       "label":  "Step 6: Background Queue"
+                   },
+                   {
+                       "default":  "1",
+                       "fieldname":  "queue_enabled",
+                       "fieldtype":  "Check",
+                       "label":  "Enable Background Queue Processing"
+                   },
+                   {
+                       "default":  "lead_assignment_short",
+                       "fieldname":  "default_queue",
+                       "fieldtype":  "Data",
+                       "label":  "Default Queue"
+                   },
+                   {
+                       "default":  "lead_assignment_bulk",
+                       "fieldname":  "bulk_queue",
+                       "fieldtype":  "Data",
+                       "label":  "Bulk Queue"
+                   },
+                   {
+                       "default":  "lead_assignment_scheduler",
+                       "fieldname":  "scheduler_queue",
+                       "fieldtype":  "Data",
+                       "label":  "Scheduler Queue"
+                   },
+                   {
+                       "default":  "20",
+                       "fieldname":  "bulk_inline_limit",
+                       "fieldtype":  "Int",
+                       "label":  "Bulk Inline Limit"
+                   },
+                   {
+                       "default":  "100",
+                       "fieldname":  "queue_batch_size",
+                       "fieldtype":  "Int",
+                       "label":  "Queue Batch Size"
+                   }
+               ],
+    "grid_page_length":  50,
+    "index_web_pages_for_search":  1,
+    "issingle":  1,
+    "links":  [
+
+              ],
+    "modified":  "2026-06-08 12:00:00.000000",
+    "modified_by":  "Administrator",
+    "module":  "New Assignement System",
+    "name":  "New Assignement System Settings",
+    "owner":  "Administrator",
+    "permissions":  [
+                        {
+                            "create":  1,
+                            "delete":  1,
+                            "email":  1,
+                            "export":  1,
+                            "print":  1,
+                            "read":  1,
+                            "report":  1,
+                            "role":  "System Manager",
+                            "share":  1,
+                            "write":  1
+                        },
+                        {
+                            "read":  1,
+                            "role":  "Sales Manager"
+                        }
+                    ],
+    "row_format":  "Dynamic",
+    "sort_field":  "modified",
+    "sort_order":  "DESC",
+    "states":  [
+
+               ],
+    "track_changes":  1
+}

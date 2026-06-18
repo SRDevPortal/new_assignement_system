@@ -1,0 +1,65 @@
+{
+ "actions": [],
+ "allow_read": 1,
+ "creation": "2026-06-18 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "fieldname",
+  "operator",
+  "value",
+  "value_to"
+ ],
+ "fields": [
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "fieldname",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Fieldname",
+   "reqd": 1
+  },
+  {
+   "default": "Equals",
+   "fieldname": "operator",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Operator",
+   "options": "Equals\nNot Equals\nIn\nNot In\nGreater Than\nLess Than\nGreater Than Or Equal\nLess Than Or Equal\nBetween\nIs Set\nIs Not Set",
+   "reqd": 1
+  },
+  {
+   "description": "For In / Not In, enter comma-separated or newline-separated values.",
+   "fieldname": "value",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Value"
+  },
+  {
+   "fieldname": "value_to",
+   "fieldtype": "Data",
+   "label": "Value To"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-06-18 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "New Assignement System",
+ "name": "New Assignement System Metadata Filter",
+ "owner": "Administrator",
+ "permissions": [],
+ "quick_entry": 1,
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "track_changes": 1
+}
