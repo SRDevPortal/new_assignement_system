@@ -11,6 +11,7 @@ from new_assignement_system.engine.rules import match_rule, match_unassign_rule
 from new_assignement_system.engine.strategies import select_agent
 from new_assignement_system.engine.sync import clear_assignment_helpers, sync_assignment_helpers
 from new_assignement_system.integrations.dedupe import should_skip_lead
+from new_assignement_system.integrations.team import get_team_for_user, has_team_field
 from new_assignement_system.settings import get_settings
 
 
@@ -36,6 +37,8 @@ def assign_lead(
 	old_owner = row.get("lead_owner")
 
 	if old_owner == new_owner:
+		if cint(settings.sync_team_from_lead_owner) and has_team_field():
+			frappe.db.set_value("CRM Lead", lead, "team", get_team_for_user(new_owner), update_modified=False)
 		sync_assignment_helpers(lead, new_owner, description="Lead Owner")
 		log_assignment(
 			lead=lead,
@@ -54,6 +57,8 @@ def assign_lead(
 	frappe.flags.new_assignement_system_in_progress = True
 	try:
 		values = {"lead_owner": new_owner}
+		if cint(settings.sync_team_from_lead_owner) and has_team_field():
+			values["team"] = get_team_for_user(new_owner)
 		if source:
 			values["source"] = source
 		frappe.db.set_value("CRM Lead", lead, values)
@@ -92,7 +97,10 @@ def clear_lead_assignment(
 
 	frappe.flags.new_assignement_system_clear_in_progress = True
 	try:
-		frappe.db.set_value("CRM Lead", lead, "lead_owner", None)
+		values = {"lead_owner": None}
+		if cint(get_settings().sync_team_from_lead_owner) and has_team_field():
+			values["team"] = None
+		frappe.db.set_value("CRM Lead", lead, values)
 		decrement_agent(old_owner)
 		clear_assignment_helpers(lead)
 	finally:

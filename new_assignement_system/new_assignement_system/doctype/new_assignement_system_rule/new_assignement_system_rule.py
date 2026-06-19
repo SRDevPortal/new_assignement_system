@@ -10,6 +10,8 @@ class NewAssignementSystemRule(Document):
 			self.priority = 100
 		if not self.strategy:
 			self.strategy = "Balanced Load"
+		if not self.filter_match_mode:
+			self.filter_match_mode = "Match All Configured Filters"
 		self.validate_assign_to_users()
 		self.validate_metadata_filters("metadata_filters")
 		self.validate_metadata_filters("unassign_metadata_filters")

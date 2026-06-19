@@ -12,6 +12,9 @@ from new_assignement_system.engine.context import (
 )
 from new_assignement_system.settings import get_settings
 
+FILTER_MATCH_ALL = "Match All Configured Filters"
+FILTER_MATCH_ANY = "Match Any Configured Filter"
+
 
 def match_rule(lead: dict, *, event_type: str | None = None) -> frappe._dict | None:
 	fields = _rule_fields(
@@ -21,6 +24,7 @@ def match_rule(lead: dict, *, event_type: str | None = None) -> frappe._dict | N
 			"priority",
 			"strategy",
 			"target_source",
+			"filter_match_mode",
 			"pipeline",
 			"source_id_values",
 			"source",
@@ -117,13 +121,23 @@ def _matches_rule(rule: frappe._dict, lead: dict, *, event_type: str | None = No
 	if cint(settings.enable_metadata_based_assignment):
 		metadata_filters = get_metadata_filters(rule.name)
 		if metadata_filters:
-			filter_results.append(matches_any_metadata_filter(metadata_filters, lead))
+			if _is_match_any(rule):
+				filter_results.append(matches_any_metadata_filter(metadata_filters, lead))
+			else:
+				filter_results.append(matches_metadata_filters(metadata_filters, lead))
 		if rule.get("metadata_filters_json"):
-			filter_results.append(_matches_any_metadata(rule.get("metadata_filters_json"), lead))
+			if _is_match_any(rule):
+				filter_results.append(_matches_any_metadata(rule.get("metadata_filters_json"), lead))
+			else:
+				filter_results.append(_matches_metadata(rule.get("metadata_filters_json"), lead))
 
 	if not filter_results:
 		return True
-	return any(filter_results)
+	return any(filter_results) if _is_match_any(rule) else all(filter_results)
+
+
+def _is_match_any(rule: frappe._dict) -> bool:
+	return (rule.get("filter_match_mode") or FILTER_MATCH_ALL) == FILTER_MATCH_ANY
 
 
 def _add_filter_result(results: list[bool], configured_value, matched: bool) -> None:

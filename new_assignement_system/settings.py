@@ -16,6 +16,7 @@ DEFAULT_SETTINGS = {
 	"disable_manual_assign_to": 1,
 	"sync_todo": 1,
 	"sync_docshare": 1,
+	"sync_team_from_lead_owner": 1,
 	"notify_manual_assign": 0,
 	"default_queue": "lead_assignment_short",
 	"bulk_queue": "lead_assignment_bulk",

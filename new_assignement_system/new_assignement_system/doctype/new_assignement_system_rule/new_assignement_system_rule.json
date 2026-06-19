@@ -9,29 +9,35 @@
     "editable_grid":  1,
     "engine":  "InnoDB",
     "field_order":  [
+                        "enable_section",
                         "rule_name",
                         "enabled",
                         "priority",
-                        "strategy",
-                        "assign_to_users",
-                        "target_source",
                         "filters_section",
+                        "filter_match_mode",
                         "pipeline",
+                        "filters_column_break",
                         "source_id_values",
+                        "advanced_filters_section",
                         "source",
                         "campaign",
                         "campaign_values",
+                        "advanced_filters_column_break",
                         "status",
                         "disposition",
                         "lead_score_min",
                         "lead_score_max",
+                        "metadata_filters_section",
+                        "metadata_filters",
+                        "assignment_section",
+                        "strategy",
+                        "assign_to_users",
+                        "target_source",
                         "capacity_section",
                         "only_if_unassigned",
                         "max_open_leads_per_agent",
                         "reassign_after_minutes",
                         "fallback_user",
-                        "metadata_filters_section",
-                        "metadata_filters",
                         "unassign_section",
                         "unassign_enabled",
                         "unassign_condition",
@@ -40,6 +46,11 @@
                         "metadata_filters_json"
                     ],
     "fields":  [
+                   {
+                       "fieldname":  "enable_section",
+                       "fieldtype":  "Section Break",
+                       "label":  "Enable"
+                   },
                    {
                        "fieldname":  "rule_name",
                        "fieldtype":  "Data",
@@ -89,18 +100,36 @@
                        "label":  "Filters"
                    },
                    {
-                       "description":  "Stored as Data so assignment can work even when the pipeline DocType is customized.",
+                       "default":  "Match All Configured Filters",
+                       "description":  "Use Match All for rules like Pipeline plus Source ID Values.",
+                       "fieldname":  "filter_match_mode",
+                       "fieldtype":  "Select",
+                       "label":  "Filter Match Mode",
+                       "options":  "Match All Configured Filters\nMatch Any Configured Filter"
+                   },
+                   {
+                       "description":  "Lead must land in this pipeline.",
                        "fieldname":  "pipeline",
                        "fieldtype":  "Data",
                        "in_standard_filter":  1,
                        "label":  "Pipeline"
                    },
                    {
-                       "description":  "Use for one or many CRM Lead sr_w_source_id values. Enter one ID per line or comma-separated.",
+                       "fieldname":  "filters_column_break",
+                       "fieldtype":  "Column Break"
+                   },
+                   {
+                       "description":  "One sr_w_source_id per line, or comma-separated.",
                        "fieldname":  "source_id_values",
                        "fieldtype":  "Small Text",
                        "in_standard_filter":  1,
                        "label":  "Source ID Values"
+                   },
+                   {
+                       "collapsible":  1,
+                       "fieldname":  "advanced_filters_section",
+                       "fieldtype":  "Section Break",
+                       "label":  "Advanced Optional Filters"
                    },
                    {
                        "fieldname":  "source",
@@ -120,6 +149,10 @@
                        "fieldname":  "campaign_values",
                        "fieldtype":  "Small Text",
                        "label":  "Campaign Values"
+                   },
+                   {
+                       "fieldname":  "advanced_filters_column_break",
+                       "fieldtype":  "Column Break"
                    },
                    {
                        "fieldname":  "status",
@@ -145,9 +178,14 @@
                        "label":  "Lead Score Max"
                    },
                    {
+                       "fieldname":  "assignment_section",
+                       "fieldtype":  "Section Break",
+                       "label":  "Assignment"
+                   },
+                   {
                        "fieldname":  "capacity_section",
                        "fieldtype":  "Section Break",
-                       "label":  "Capacity"
+                       "label":  "Capacity And Fallback"
                    },
                    {
                        "default":  "1",

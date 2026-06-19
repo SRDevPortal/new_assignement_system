@@ -27,6 +27,7 @@
                         "step_5_assignment_sync_section",
                         "sync_todo",
                         "sync_docshare",
+                        "sync_team_from_lead_owner",
                         "notify_manual_assign",
                         "step_6_background_queue_section",
                         "queue_enabled",
@@ -46,13 +47,13 @@
                        "default":  "1",
                        "fieldname":  "enabled",
                        "fieldtype":  "Check",
-                       "label":  "Enabled"
+                       "label":  "Enable Assignment System"
                    },
                    {
                        "default":  "1",
                        "fieldname":  "disable_manual_assign_to",
                        "fieldtype":  "Check",
-                       "label":  "Disable Native Assign To UI"
+                       "label":  "Use Custom Assign Controls Only"
                    },
                    {
                        "fieldname":  "step_2_new_lead_assignment_section",
@@ -77,7 +78,7 @@
                        "description":  "When enabled, a matching assignment rule can replace a lead_owner supplied during API lead creation.",
                        "fieldname":  "override_api_owner_when_rule_matches",
                        "fieldtype":  "Check",
-                       "label":  "Override API Owner When Rule Matches"
+                       "label":  "Replace API Lead Owner When Rule Matches"
                    },
                    {
                        "fieldname":  "step_3_rule_matching_section",
@@ -120,26 +121,26 @@
                        "default":  "0",
                        "fieldname":  "auto_reassign_on_update",
                        "fieldtype":  "Check",
-                       "label":  "Auto Reassign On Update"
+                       "label":  "Reassign Leads When Watched Fields Change"
                    },
                    {
                        "default":  "1",
                        "description":  "Evaluate rule unassign conditions when CRM Lead metadata/status changes.",
                        "fieldname":  "auto_unassign_on_update",
                        "fieldtype":  "Check",
-                       "label":  "Auto Unassign On Update"
+                       "label":  "Unassign Leads When Unassign Rule Matches"
                    },
                    {
                        "default":  "0",
                        "fieldname":  "stale_reassignment_enabled",
                        "fieldtype":  "Check",
-                       "label":  "Stale Reassignment Enabled"
+                       "label":  "Reassign Stale Leads"
                    },
                    {
                        "default":  "120",
                        "fieldname":  "stale_after_minutes",
                        "fieldtype":  "Int",
-                       "label":  "Stale After Minutes"
+                       "label":  "Stale Lead Age In Minutes"
                    },
                    {
                        "fieldname":  "step_5_assignment_sync_section",
@@ -150,19 +151,26 @@
                        "default":  "1",
                        "fieldname":  "sync_todo",
                        "fieldtype":  "Check",
-                       "label":  "Sync ToDo"
+                       "label":  "Create Assignment ToDo"
                    },
                    {
                        "default":  "1",
                        "fieldname":  "sync_docshare",
                        "fieldtype":  "Check",
-                       "label":  "Sync DocShare"
+                       "label":  "Share Lead With Assigned Owner"
+                   },
+                   {
+                       "default":  "1",
+                       "description":  "Set CRM Lead Team from the assigned Lead Owner's active Team.",
+                       "fieldname":  "sync_team_from_lead_owner",
+                       "fieldtype":  "Check",
+                       "label":  "Set Team From Assigned Owner"
                    },
                    {
                        "default":  "0",
                        "fieldname":  "notify_manual_assign",
                        "fieldtype":  "Check",
-                       "label":  "Notify Manual Assignments"
+                       "label":  "Notify Users On Manual Assignment"
                    },
                    {
                        "fieldname":  "step_6_background_queue_section",
@@ -179,31 +187,31 @@
                        "default":  "lead_assignment_short",
                        "fieldname":  "default_queue",
                        "fieldtype":  "Data",
-                       "label":  "Default Queue"
+                       "label":  "Default Queue Name"
                    },
                    {
                        "default":  "lead_assignment_bulk",
                        "fieldname":  "bulk_queue",
                        "fieldtype":  "Data",
-                       "label":  "Bulk Queue"
+                       "label":  "Bulk Assignment Queue Name"
                    },
                    {
                        "default":  "lead_assignment_scheduler",
                        "fieldname":  "scheduler_queue",
                        "fieldtype":  "Data",
-                       "label":  "Scheduler Queue"
+                       "label":  "Scheduled Jobs Queue Name"
                    },
                    {
                        "default":  "20",
                        "fieldname":  "bulk_inline_limit",
                        "fieldtype":  "Int",
-                       "label":  "Bulk Inline Limit"
+                       "label":  "Inline Bulk Limit"
                    },
                    {
                        "default":  "100",
                        "fieldname":  "queue_batch_size",
                        "fieldtype":  "Int",
-                       "label":  "Queue Batch Size"
+                       "label":  "Queue Processing Batch Size"
                    }
                ],
     "grid_page_length":  50,
