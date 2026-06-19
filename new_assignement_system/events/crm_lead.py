@@ -8,7 +8,6 @@ from new_assignement_system.engine.rules import match_rule
 from new_assignement_system.engine.service import (
 	auto_assign_lead,
 	auto_unassign_lead,
-	can_auto_assign_lead,
 	can_auto_unassign_lead,
 )
 from new_assignement_system.engine.sync import sync_assignment_helpers
@@ -60,9 +59,7 @@ def after_insert(doc, method: str | None = None) -> None:
 		return
 
 	if settings.auto_assign_on_insert:
-		if not can_auto_assign_lead(doc.name, event_type="Insert"):
-			return
-		if settings.inline_assign_on_insert:
+		if cint(settings.inline_assign_on_insert) or not cint(settings.queue_enabled):
 			frappe.db.after_commit.add(lambda lead=doc.name: _assign_insert_inline_or_queue(lead))
 			return
 		enqueue_lead(doc.name, event_type="Insert", process_now=True)
@@ -82,14 +79,18 @@ def on_update(doc, method: str | None = None) -> None:
 
 	if any(_has_changed(doc, fieldname) for fieldname in WATCH_FIELDS):
 		if cint(settings.auto_unassign_on_update) and can_auto_unassign_lead(doc.name, event_type="Update"):
-			enqueue_lead(doc.name, event_type="Unassign", process_now=True)
+			_process_update_inline_or_queue(doc.name, event_type="Unassign")
 			return
 
-		if not cint(settings.auto_reassign_on_update):
+		# A lead may land before WA/channel mapping writes pipeline or source id.
+		# If owner is blank, let the normal assignment service try again when
+		# watched routing fields become ready. Existing owners are only changed
+		# when explicit reassignment is enabled.
+		if doc.get("lead_owner") and not cint(settings.auto_reassign_on_update):
 			return
-		if not can_auto_assign_lead(doc.name, event_type="Update"):
+		if not doc.get("lead_owner") and not cint(settings.auto_assign_on_insert):
 			return
-		enqueue_lead(doc.name, event_type="Update", process_now=True)
+		_process_update_inline_or_queue(doc.name, event_type="Update")
 
 
 def _has_changed(doc, fieldname: str) -> bool:
@@ -116,4 +117,26 @@ def _assign_insert_inline_or_queue(lead: str) -> None:
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "Inline New Assignement System Failed")
 		enqueue_lead(lead, event_type="Insert", process_now=True)
+		frappe.db.commit()
+
+
+def _process_update_inline_or_queue(lead: str, *, event_type: str) -> None:
+	settings = get_settings()
+	if cint(settings.queue_enabled):
+		enqueue_lead(lead, event_type=event_type, process_now=True)
+		return
+
+	frappe.db.after_commit.add(lambda lead=lead, event_type=event_type: _process_update_inline(lead, event_type))
+
+
+def _process_update_inline(lead: str, event_type: str) -> None:
+	try:
+		if event_type == "Unassign":
+			auto_unassign_lead(lead, event_type="Update")
+		else:
+			auto_assign_lead(lead, event_type=event_type)
+		frappe.db.commit()
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "Inline New Assignement System Update Failed")
+		enqueue_lead(lead, event_type=event_type, process_now=True)
 		frappe.db.commit()

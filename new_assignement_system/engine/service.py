@@ -24,6 +24,7 @@ def assign_lead(
 	strategy: str | None = None,
 	queue: str | None = None,
 	source: str | None = None,
+	pipeline: str | None = None,
 	triggered_by: str | None = None,
 	ignore_permissions: bool = False,
 ) -> dict:
@@ -61,6 +62,8 @@ def assign_lead(
 			values["team"] = get_team_for_user(new_owner)
 		if source:
 			values["source"] = source
+		if pipeline and frappe.db.has_column("CRM Lead", "sr_lead_pipeline"):
+			values["sr_lead_pipeline"] = pipeline
 		frappe.db.set_value("CRM Lead", lead, values)
 		if old_owner:
 			decrement_agent(old_owner)
@@ -170,6 +173,7 @@ def auto_assign_lead(lead: str, *, event_type: str = "Manual", queue: str | None
 				strategy=rule.strategy,
 				queue=queue,
 				source=rule.target_source,
+				pipeline=rule.get("target_pipeline"),
 				triggered_by=event_type,
 				ignore_permissions=True,
 			)
@@ -183,6 +187,7 @@ def auto_assign_lead(lead: str, *, event_type: str = "Manual", queue: str | None
 		strategy=rule.strategy,
 		queue=queue,
 		source=rule.target_source,
+		pipeline=rule.get("target_pipeline"),
 		triggered_by=event_type,
 		ignore_permissions=True,
 	)

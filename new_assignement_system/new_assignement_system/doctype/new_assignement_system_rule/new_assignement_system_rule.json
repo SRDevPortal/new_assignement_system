@@ -32,6 +32,7 @@
                         "assignment_section",
                         "strategy",
                         "assign_to_users",
+                        "target_pipeline",
                         "target_source",
                         "capacity_section",
                         "only_if_unassigned",
@@ -93,6 +94,12 @@
                        "fieldtype":  "Link",
                        "label":  "Target Source",
                        "options":  "SR Lead Source"
+                   },
+                   {
+                       "description":  "Optional. Pipeline to set on CRM Lead after this rule assigns an owner.",
+                       "fieldname":  "target_pipeline",
+                       "fieldtype":  "Data",
+                       "label":  "Target Pipeline"
                    },
                    {
                        "fieldname":  "filters_section",
