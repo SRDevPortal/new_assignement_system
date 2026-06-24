@@ -31,6 +31,7 @@
                         "metadata_filters",
                         "assignment_section",
                         "strategy",
+                        "team",
                         "assign_to_users",
                         "target_pipeline",
                         "target_source",
@@ -188,6 +189,15 @@
                        "fieldname":  "assignment_section",
                        "fieldtype":  "Section Break",
                        "label":  "Assignment"
+                   },
+                   {
+                       "description":  "Optional. When Assign To Users is empty, leads are assigned across all active members of this team. When Assign To Users has rows, only active members of this team can be selected.",
+                       "fieldname":  "team",
+                       "fieldtype":  "Link",
+                       "in_list_view":  1,
+                       "in_standard_filter":  1,
+                       "label":  "Team",
+                       "options":  "Team"
                    },
                    {
                        "fieldname":  "capacity_section",

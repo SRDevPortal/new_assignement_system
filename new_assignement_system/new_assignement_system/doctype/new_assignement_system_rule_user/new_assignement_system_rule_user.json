@@ -39,12 +39,14 @@
    "default": "0",
    "fieldname": "capacity",
    "fieldtype": "Int",
+   "in_list_view": 1,
    "label": "Capacity"
   },
   {
    "default": "0",
    "fieldname": "max_daily_assignments",
    "fieldtype": "Int",
+   "in_list_view": 1,
    "label": "Max Daily Assignments"
   }
  ],

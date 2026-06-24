@@ -8,6 +8,7 @@ from frappe.utils import get_time, now_datetime
 
 from new_assignement_system.engine.context import get_campaign, get_pipeline
 from new_assignement_system.integrations.role_permissions import agent_allowed_for_pipeline
+from new_assignement_system.integrations.team import get_active_team_members
 
 
 def get_candidate_agents(rule: frappe._dict | None, lead: dict) -> list[frappe._dict]:
@@ -36,6 +37,11 @@ def is_user_session_available(user: str | None) -> bool:
 
 
 def _get_rule_user_candidates(rule: frappe._dict | None, lead: dict) -> list[frappe._dict]:
+	if not rule:
+		return []
+
+	if not _has_rule_users(rule) and rule.get("team"):
+		return _get_team_user_candidates(rule, lead)
 	if not _has_rule_users(rule):
 		return []
 
@@ -71,6 +77,48 @@ def _get_rule_user_candidates(rule: frappe._dict | None, lead: dict) -> list[fra
 		order by load_score asc, last_assigned_at asc, ru.idx asc
 		""",
 		{"rule": rule.name},
+		as_dict=True,
+	)
+
+	if rule.get("team"):
+		members = set(get_active_team_members(rule.get("team")))
+		rows = [row for row in rows if row.agent in members]
+
+	return [frappe._dict(row) for row in rows if _is_eligible(row, rule, lead)]
+
+
+def _get_team_user_candidates(rule: frappe._dict, lead: dict) -> list[frappe._dict]:
+	members = get_active_team_members(rule.get("team"))
+	if not members:
+		return []
+
+	rows = frappe.db.sql(
+		"""
+		select
+			u.name as name,
+			u.name as agent,
+			coalesce(nullif(s.weight, 0), 1) as weight,
+			coalesce(s.capacity, 0) as capacity,
+			coalesce(s.current_open_leads, 0) as current_open_leads,
+			coalesce(s.today_assigned_count, 0) as today_assigned_count,
+			coalesce(s.today_reassigned_count, 0) as today_reassigned_count,
+			s.last_assigned_at,
+			coalesce(s.load_score, 0) as load_score,
+			s.allowed_pipelines,
+			s.allowed_sources,
+			s.allowed_campaigns,
+			s.skill_tags,
+			s.shift_start,
+			s.shift_end,
+			0 as max_daily_assignments
+		from `tabUser` u
+		left join `tabNew Assignement System Agent State` s
+			on s.agent = u.name
+		where u.name in %(members)s
+		  and ifnull(u.enabled, 0) = 1
+		order by load_score asc, last_assigned_at asc, u.name asc
+		""",
+		{"members": tuple(members)},
 		as_dict=True,
 	)
 

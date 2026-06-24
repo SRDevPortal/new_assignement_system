@@ -15,6 +15,7 @@ after_migrate = "new_assignement_system.install.after_migrate"
 
 doctype_js = {
 	"CRM Lead": "public/js/crm_lead_form.js",
+	"New Assignement System Rule": "public/js/rule_form.js",
 }
 
 doctype_list_js = {

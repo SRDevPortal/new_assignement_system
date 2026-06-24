@@ -3,6 +3,8 @@ from __future__ import annotations
 import frappe
 from frappe.model.document import Document
 
+from new_assignement_system.integrations.team import get_active_team_members
+
 
 class NewAssignementSystemRule(Document):
 	def validate(self) -> None:
@@ -29,11 +31,22 @@ class NewAssignementSystemRule(Document):
 	def validate_assign_to_users(self) -> None:
 		seen = set()
 		duplicates = set()
+		team_members = set()
+		if self.get("team"):
+			if not frappe.db.exists("DocType", "Team"):
+				frappe.throw("Team DocType is required to use Team-based assignment.")
+			if not frappe.db.exists("Team", {"name": self.team, "is_active": 1}):
+				frappe.throw(f"Team {self.team} must be active.")
+			team_members = set(get_active_team_members(self.team))
 		for row in self.get("assign_to_users", []):
 			if not row.user:
 				continue
 			if row.user in seen:
 				duplicates.add(row.user)
+			if team_members and row.user not in team_members:
+				frappe.throw(
+					frappe._("User {0} is not an active member of Team {1}.").format(row.user, self.team)
+				)
 			seen.add(row.user)
 		if duplicates:
 			frappe.throw("Duplicate users in Assign To Users: " + ", ".join(sorted(duplicates)))

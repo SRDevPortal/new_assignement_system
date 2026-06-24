@@ -3,6 +3,7 @@ from __future__ import annotations
 import frappe
 
 from new_assignement_system.engine.queue import enqueue_lead
+from new_assignement_system.integrations.team import get_active_team_members
 
 LEGACY_FRAPPE_ASSIGNMENT_RULES = (
 	"MI Lead Rule-Aman",
@@ -23,6 +24,11 @@ def _as_values(value) -> list[str]:
 	if not isinstance(value, list):
 		return []
 	return [str(item).strip() for item in value if str(item).strip()]
+
+
+@frappe.whitelist()
+def get_team_members(team: str | None = None) -> list[str]:
+	return get_active_team_members(team)
 
 
 @frappe.whitelist()
