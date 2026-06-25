@@ -154,7 +154,7 @@ def _is_eligible(row: dict, rule: frappe._dict | None, lead: dict) -> bool:
 	if max_daily and int(row.get("today_assigned_count") or 0) >= max_daily:
 		return False
 
-	pipeline = get_pipeline(lead)
+	pipeline = _effective_pipeline(rule, lead)
 	if not _allowed_by_list(row.get("allowed_pipelines"), pipeline):
 		return False
 	if not agent_allowed_for_pipeline(row.get("agent"), pipeline):
@@ -166,6 +166,10 @@ def _is_eligible(row: dict, rule: frappe._dict | None, lead: dict) -> bool:
 	if not _inside_shift(row.get("shift_start"), row.get("shift_end")):
 		return False
 	return True
+
+
+def _effective_pipeline(rule: frappe._dict | None, lead: dict) -> str | None:
+	return (rule or {}).get("target_pipeline") or get_pipeline(lead)
 
 
 def _allowed_by_list(raw: str | None, value: str | None) -> bool:
