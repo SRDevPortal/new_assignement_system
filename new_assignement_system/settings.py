@@ -10,7 +10,7 @@ DEFAULT_SETTINGS = {
 	"inline_assign_on_insert": 1,
 	"override_api_owner_when_rule_matches": 0,
 	"auto_reassign_on_update": 0,
-	"auto_unassign_on_update": 1,
+	"auto_unassign_on_update": 0,
 	"enable_metadata_based_assignment": 0,
 	"allow_fallback_without_active_session": 0,
 	"disable_manual_assign_to": 1,

@@ -124,7 +124,7 @@
                        "label":  "Reassign Leads When Watched Fields Change"
                    },
                    {
-                       "default":  "1",
+                       "default":  "0",
                        "description":  "Evaluate rule unassign conditions when CRM Lead metadata/status changes.",
                        "fieldname":  "auto_unassign_on_update",
                        "fieldtype":  "Check",
