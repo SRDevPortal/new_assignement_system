@@ -101,6 +101,12 @@ def rebuild_agent_states() -> None:
 	rebuild_all()
 
 
+def reset_daily_agent_counts() -> None:
+	from new_assignement_system.engine.counters import reset_daily_counts
+
+	reset_daily_counts()
+
+
 def repair_assignment_helpers() -> None:
 	from new_assignement_system.engine.sync import sync_assignment_helpers
 

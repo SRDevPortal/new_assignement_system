@@ -310,7 +310,6 @@ def inspect_new_assignement_system_rules() -> dict:
 				"strategy",
 				"pipeline",
 				"source_id_values",
-				"target_agents",
 				"fallback_user",
 				"modified",
 			],

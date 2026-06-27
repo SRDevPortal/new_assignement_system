@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+from hashlib import sha1
+
 import frappe
 from frappe.utils import cint
 
@@ -151,8 +154,31 @@ def auto_assign_lead(lead: str, *, event_type: str = "Manual", queue: str | None
 			)
 		return _skip(lead, "No assignment rule matched", event_type, queue, row=row)
 
+	strategy = rule.strategy or settings.default_strategy
+	if strategy == "Round Robin":
+		with _round_robin_lock(rule.name):
+			row = get_lead_context(lead, for_update=True)
+			skip, reason = should_skip_lead(row)
+			if skip:
+				return _skip(lead, reason, event_type, queue, row=row, rule=rule)
+			result = _assign_by_rule(lead, row, rule, strategy, event_type, queue, settings)
+			frappe.db.commit()
+			return result
+
+	return _assign_by_rule(lead, row, rule, strategy, event_type, queue, settings)
+
+
+def _assign_by_rule(
+	lead: str,
+	row: frappe._dict,
+	rule: frappe._dict,
+	strategy: str,
+	event_type: str,
+	queue: str | None,
+	settings: frappe._dict,
+) -> dict:
 	candidates = get_candidate_agents(rule, row)
-	selected = select_agent(candidates, rule.strategy or settings.default_strategy, row)
+	selected = select_agent(candidates, strategy, row, rule=rule)
 	if not selected:
 		fallback = rule.fallback_user or settings.fallback_user
 		if fallback:
@@ -170,7 +196,7 @@ def auto_assign_lead(lead: str, *, event_type: str = "Manual", queue: str | None
 				fallback,
 				reason=f"No available online agent for rule {rule.name}; fallback user selected",
 				rule=rule.name,
-				strategy=rule.strategy,
+				strategy=strategy,
 				queue=queue,
 				source=rule.target_source,
 				pipeline=rule.get("target_pipeline"),
@@ -184,13 +210,25 @@ def auto_assign_lead(lead: str, *, event_type: str = "Manual", queue: str | None
 		selected.agent,
 		reason=f"Auto assignment by rule {rule.name}",
 		rule=rule.name,
-		strategy=rule.strategy,
+		strategy=strategy,
 		queue=queue,
 		source=rule.target_source,
 		pipeline=rule.get("target_pipeline"),
 		triggered_by=event_type,
 		ignore_permissions=True,
 	)
+
+
+@contextmanager
+def _round_robin_lock(rule: str):
+	lock_name = "nas_rr_" + sha1(str(rule).encode("utf-8")).hexdigest()
+	acquired = frappe.db.sql("select get_lock(%s, %s)", (lock_name, 30))[0][0]
+	if not acquired:
+		frappe.throw(f"Could not acquire Round Robin lock for rule {rule}")
+	try:
+		yield
+	finally:
+		frappe.db.sql("select release_lock(%s)", (lock_name,))
 
 
 def auto_unassign_lead(lead: str, *, event_type: str = "Update", queue: str | None = None) -> dict:

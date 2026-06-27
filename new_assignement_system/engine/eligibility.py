@@ -56,6 +56,7 @@ def _get_rule_user_candidates(rule: frappe._dict | None, lead: dict) -> list[fra
 			coalesce(s.today_assigned_count, 0) as today_assigned_count,
 			coalesce(s.today_reassigned_count, 0) as today_reassigned_count,
 			s.last_assigned_at,
+			ru.idx as rule_user_idx,
 			coalesce(s.load_score, 0) as load_score,
 			s.allowed_pipelines,
 			s.allowed_sources,
@@ -74,6 +75,7 @@ def _get_rule_user_candidates(rule: frappe._dict | None, lead: dict) -> list[fra
 		  and ifnull(ru.enabled, 1) = 1
 		  and ru.user is not null
 		  and ru.user != ''
+		  and ifnull(s.active, 1) = 1
 		order by load_score asc, last_assigned_at asc, ru.idx asc
 		""",
 		{"rule": rule.name},
@@ -103,6 +105,7 @@ def _get_team_user_candidates(rule: frappe._dict, lead: dict) -> list[frappe._di
 			coalesce(s.today_assigned_count, 0) as today_assigned_count,
 			coalesce(s.today_reassigned_count, 0) as today_reassigned_count,
 			s.last_assigned_at,
+			0 as rule_user_idx,
 			coalesce(s.load_score, 0) as load_score,
 			s.allowed_pipelines,
 			s.allowed_sources,
@@ -116,6 +119,7 @@ def _get_team_user_candidates(rule: frappe._dict, lead: dict) -> list[frappe._di
 			on s.agent = u.name
 		where u.name in %(members)s
 		  and ifnull(u.enabled, 0) = 1
+		  and ifnull(s.active, 1) = 1
 		order by load_score asc, last_assigned_at asc, u.name asc
 		""",
 		{"members": tuple(members)},

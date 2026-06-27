@@ -45,6 +45,9 @@ scheduler_events = {
 		"0 * * * *": [
 			"new_assignement_system.jobs.repair_agent_state_sample",
 		],
+		"5 0 * * *": [
+			"new_assignement_system.jobs.reset_daily_agent_counts",
+		],
 		"30 2 * * *": [
 			"new_assignement_system.jobs.rebuild_agent_states",
 			"new_assignement_system.jobs.repair_assignment_helpers",

@@ -45,4 +45,5 @@ def ensure_assignment_indexes() -> None:
 	_add_index("New Assignement System Agent State", ["agent"], "idx_claas_agent")
 	_add_index("New Assignement System Log", ["lead"], "idx_clal_lead")
 	_add_index("New Assignement System Log", ["new_owner", "creation"], "idx_clal_owner_creation")
+	_add_index("New Assignement System Log", ["rule", "new_owner", "creation"], "idx_nas_log_rule_owner_creation")
 	_add_index("New Assignement System Log", ["action", "creation"], "idx_clal_action_creation")

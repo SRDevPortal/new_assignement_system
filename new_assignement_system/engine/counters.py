@@ -100,19 +100,55 @@ def rebuild_all() -> int:
 			load_score = 0
 		"""
 	)
-	fields = ["lead_owner"]
 
-	rows = frappe.get_all(
-		"CRM Lead",
-		filters={"lead_owner": ["is", "set"], "converted": 0},
-		fields=fields,
-		limit_page_length=0,
+	rows = frappe.db.sql(
+		"""
+		select lead_owner, count(*) as open_leads
+		from `tabCRM Lead`
+		where lead_owner is not null
+		  and lead_owner != ''
+		  and ifnull(converted, 0) = 0
+		group by lead_owner
+		""",
+		as_dict=True,
 	)
 	count = 0
 	for row in rows:
-		increment_agent(row.lead_owner)
-		count += 1
+		name = ensure_agent_state(row.lead_owner)
+		open_leads = int(row.open_leads or 0)
+		frappe.db.sql(
+			"""
+			update `tabNew Assignement System Agent State`
+			set current_open_leads = %s,
+				load_score = case
+					when ifnull(capacity, 0) > 0
+					then %s / (capacity * ifnull(nullif(weight, 0), 1))
+					else %s / ifnull(nullif(weight, 0), 1)
+				end,
+				modified = %s,
+				modified_by = %s
+			where name = %s
+			""",
+			(open_leads, open_leads, open_leads, now_datetime(), frappe.session.user, name),
+		)
+		count += open_leads
 	return count
+
+
+def reset_daily_counts() -> None:
+	if not frappe.db.exists("DocType", "New Assignement System Agent State"):
+		return
+
+	frappe.db.sql(
+		"""
+		update `tabNew Assignement System Agent State`
+		set today_assigned_count = 0,
+			today_reassigned_count = 0,
+			modified = %s,
+			modified_by = %s
+		""",
+		(now_datetime(), frappe.session.user),
+	)
 
 
 def sync_from_teams() -> int:
