@@ -76,7 +76,7 @@ def decrement_agent(agent: str | None, team: str | None = None) -> None:
 
 def _find_state(agent: str, team: str | None = None) -> str | None:
 	filters = {"agent": agent}
-	if team:
+	if team and frappe.db.has_column("New Assignement System Agent State", "team"):
 		filters["team"] = team
 	name = frappe.db.get_value("New Assignement System Agent State", filters, "name")
 	if name:
@@ -149,6 +149,37 @@ def reset_daily_counts() -> None:
 		""",
 		(now_datetime(), frappe.session.user),
 	)
+
+
+def sync_login_status() -> int:
+	if not frappe.db.exists("DocType", "New Assignement System Agent State"):
+		return 0
+
+	from new_assignement_system.engine.eligibility import is_user_session_available
+
+	rows = frappe.get_all(
+		"New Assignement System Agent State",
+		fields=["name", "agent", "active"],
+		limit_page_length=0,
+	)
+	updated = 0
+	now = now_datetime()
+	for row in rows:
+		active = 1 if is_user_session_available(row.agent) else 0
+		if int(row.active or 0) == active:
+			continue
+		frappe.db.set_value(
+			"New Assignement System Agent State",
+			row.name,
+			{
+				"active": active,
+				"modified": now,
+				"modified_by": frappe.session.user,
+			},
+			update_modified=False,
+		)
+		updated += 1
+	return updated
 
 
 def sync_from_teams() -> int:

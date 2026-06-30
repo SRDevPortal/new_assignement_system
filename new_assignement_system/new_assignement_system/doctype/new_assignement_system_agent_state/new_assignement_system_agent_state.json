@@ -40,10 +40,12 @@
                    },
                    {
                        "default":  "1",
+                       "description":  "Auto-synced from the agent's active Frappe login session.",
                        "fieldname":  "active",
                        "fieldtype":  "Check",
                        "in_list_view":  1,
-                       "label":  "Active"
+                       "label":  "Active",
+                       "read_only":  1
                    },
                    {
                        "fieldname":  "availability_section",

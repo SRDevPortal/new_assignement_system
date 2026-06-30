@@ -95,6 +95,12 @@ def repair_agent_state_sample() -> None:
 	sync_from_teams()
 
 
+def sync_agent_login_status() -> None:
+	from new_assignement_system.engine.counters import sync_login_status
+
+	sync_login_status()
+
+
 def rebuild_agent_states() -> None:
 	from new_assignement_system.engine.counters import rebuild_all
 

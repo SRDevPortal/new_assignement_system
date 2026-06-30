@@ -326,23 +326,26 @@ def inspect_mi_agent_states() -> dict:
 		"mandeep_mi@sriaas.com",
 		"ankitchaudhary_mi@sriaas.com",
 	]
+	fields = [
+		"name",
+		"agent",
+		"active",
+		"capacity",
+		"current_open_leads",
+		"allowed_pipelines",
+		"allowed_sources",
+		"allowed_campaigns",
+		"shift_start",
+		"shift_end",
+	]
+	if frappe.db.has_column("New Assignement System Agent State", "team"):
+		fields.insert(2, "team")
+
 	return {
 		"states": frappe.get_all(
 			"New Assignement System Agent State",
 			filters={"agent": ["in", agents]},
-			fields=[
-				"name",
-				"agent",
-				"team",
-				"active",
-				"capacity",
-				"current_open_leads",
-				"allowed_pipelines",
-				"allowed_sources",
-				"allowed_campaigns",
-				"shift_start",
-				"shift_end",
-			],
+			fields=fields,
 			order_by="agent asc, modified desc",
 			limit_page_length=100,
 		)

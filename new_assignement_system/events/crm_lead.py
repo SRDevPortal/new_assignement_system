@@ -111,6 +111,8 @@ def _should_override_api_owner(doc, settings) -> bool:
 
 
 def _assign_insert_inline_or_queue(lead: str) -> None:
+	if not frappe.db.exists("CRM Lead", lead):
+		return
 	try:
 		auto_assign_lead(lead, event_type="Insert")
 		frappe.db.commit()
@@ -130,6 +132,8 @@ def _process_update_inline_or_queue(lead: str, *, event_type: str) -> None:
 
 
 def _process_update_inline(lead: str, event_type: str) -> None:
+	if not frappe.db.exists("CRM Lead", lead):
+		return
 	try:
 		if event_type == "Unassign":
 			auto_unassign_lead(lead, event_type="Update")

@@ -149,7 +149,7 @@ def _ensure_lead_fields() -> None:
 					"fieldname": "sr_lead_pipeline",
 					"label": "SR Lead Pipeline",
 					"fieldtype": "Select",
-					"options": "\nHigh Intent\nNurture\nPaid Campaign\nPartner Referral",
+					"options": "\nHigh Intent\nNurture\nPaid Campaign\nPartner Referral\nKidney LP Dom\nMI Meta Interakt",
 					"insert_after": "source",
 				},
 				{
@@ -655,6 +655,7 @@ def test_any_configured_filter_matching() -> dict:
 			"source_id_values": "120250583820420015\n120250583820420016",
 			"source": "Whatsapp",
 			"status": "Fresh",
+			"filter_match_mode": "Match Any Configured Filter",
 			"target_source": "Auto Facebook",
 			"lead_score_min": 0,
 			"lead_score_max": 0,
