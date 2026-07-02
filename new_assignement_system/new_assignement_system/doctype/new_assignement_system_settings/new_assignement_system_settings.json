@@ -103,9 +103,8 @@
                        "depends_on":  "eval:doc.enable_fresh_lead_limit",
                        "description":  "Lead status counted as fresh for assignment capacity.",
                        "fieldname":  "fresh_lead_status",
-                       "fieldtype":  "Link",
-                       "label":  "Fresh Lead Status",
-                       "options":  "CRM Lead Status"
+                       "fieldtype":  "Data",
+                       "label":  "Fresh Lead Status"
                    },
                    {
                        "default":  "5",
