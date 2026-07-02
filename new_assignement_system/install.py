@@ -16,4 +16,5 @@ def after_migrate() -> None:
 		settings = frappe.get_single("New Assignement System Settings")
 		if not settings.enabled:
 			settings.enabled = 1
-		settings.save(ignore_permissions=True, ignore_links=True)
+		settings.flags.ignore_links = True
+		settings.save(ignore_permissions=True)
