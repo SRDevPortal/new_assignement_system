@@ -36,7 +36,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Event Type",
-   "options": "Insert\nUpdate\nManual\nBulk\nReassign\nStale\nRepair\nUnassign"
+   "options": "Insert\nUpdate\nManual\nBulk\nReassign\nStale\nFresh FIFO\nRepair\nUnassign"
   },
   {
    "default": "Pending",

@@ -4,11 +4,13 @@ from datetime import datetime, time
 
 import frappe
 from frappe.sessions import get_expired_threshold
+from frappe.utils import cint
 from frappe.utils import get_time, now_datetime
 
 from new_assignement_system.engine.context import get_campaign, get_pipeline
 from new_assignement_system.integrations.role_permissions import agent_allowed_for_pipeline
 from new_assignement_system.integrations.team import get_active_team_members
+from new_assignement_system.settings import get_settings
 
 
 def get_candidate_agents(rule: frappe._dict | None, lead: dict) -> list[frappe._dict]:
@@ -86,7 +88,9 @@ def _get_rule_user_candidates(rule: frappe._dict | None, lead: dict) -> list[fra
 		members = set(get_active_team_members(rule.get("team")))
 		rows = [row for row in rows if row.agent in members]
 
-	return [frappe._dict(row) for row in rows if _is_eligible(row, rule, lead)]
+	settings = get_settings()
+	attach_fresh_lead_counts(rows, lead, settings=settings)
+	return [frappe._dict(row) for row in rows if _is_eligible(row, rule, lead, settings=settings)]
 
 
 def _get_team_user_candidates(rule: frappe._dict, lead: dict) -> list[frappe._dict]:
@@ -126,7 +130,9 @@ def _get_team_user_candidates(rule: frappe._dict, lead: dict) -> list[frappe._di
 		as_dict=True,
 	)
 
-	return [frappe._dict(row) for row in rows if _is_eligible(row, rule, lead)]
+	settings = get_settings()
+	attach_fresh_lead_counts(rows, lead, settings=settings)
+	return [frappe._dict(row) for row in rows if _is_eligible(row, rule, lead, settings=settings)]
 
 
 def _has_rule_users(rule: frappe._dict | None) -> bool:
@@ -145,17 +151,28 @@ def _has_rule_users(rule: frappe._dict | None) -> bool:
 	)
 
 
-def _is_eligible(row: dict, rule: frappe._dict | None, lead: dict) -> bool:
+def _is_eligible(
+	row: dict,
+	rule: frappe._dict | None,
+	lead: dict,
+	*,
+	settings: frappe._dict | None = None,
+) -> bool:
 	if not is_user_session_available(row.get("agent")):
 		return False
 
-	capacity = int(row.get("capacity") or 0)
-	rule_cap = int((rule or {}).get("max_open_leads_per_agent") or 0)
-	effective_capacity = min([value for value in (capacity, rule_cap) if value] or [0])
-	if effective_capacity and int(row.get("current_open_leads") or 0) >= effective_capacity:
+	settings = settings or get_settings()
+	if cint(settings.enable_total_capacity_limit) and _total_capacity_reached(row, rule):
 		return False
 	max_daily = int(row.get("max_daily_assignments") or 0)
 	if max_daily and int(row.get("today_assigned_count") or 0) >= max_daily:
+		return False
+	if not agent_has_fresh_lead_capacity(
+		row.get("agent"),
+		lead,
+		settings=settings,
+		fresh_lead_count=row.get("fresh_lead_count"),
+	):
 		return False
 
 	pipeline = _effective_pipeline(rule, lead)
@@ -170,6 +187,98 @@ def _is_eligible(row: dict, rule: frappe._dict | None, lead: dict) -> bool:
 	if not _inside_shift(row.get("shift_start"), row.get("shift_end")):
 		return False
 	return True
+
+
+def _total_capacity_reached(row: dict, rule: frappe._dict | None) -> bool:
+	capacity = int(row.get("capacity") or 0)
+	rule_cap = int((rule or {}).get("max_open_leads_per_agent") or 0)
+	effective_capacity = min([value for value in (capacity, rule_cap) if value] or [0])
+	return bool(effective_capacity and int(row.get("current_open_leads") or 0) >= effective_capacity)
+
+
+def agent_has_fresh_lead_capacity(
+	agent: str | None,
+	lead: dict | None = None,
+	*,
+	settings: frappe._dict | None = None,
+	fresh_lead_count: int | None = None,
+) -> bool:
+	settings = settings or get_settings()
+	if not agent or not cint(settings.enable_fresh_lead_limit):
+		return True
+
+	fresh_status = get_fresh_lead_status(settings)
+	if not fresh_status or (lead and not is_fresh_lead(lead, settings=settings)):
+		return True
+
+	limit = int(settings.fresh_lead_limit_per_agent or 0)
+	if limit <= 0:
+		return True
+	if fresh_lead_count is None:
+		fresh_lead_count = get_agent_fresh_lead_count(agent, fresh_status)
+	return int(fresh_lead_count or 0) < limit
+
+
+def attach_fresh_lead_counts(
+	rows: list[dict],
+	lead: dict | None = None,
+	*,
+	settings: frappe._dict | None = None,
+) -> None:
+	settings = settings or get_settings()
+	if not rows or not cint(settings.enable_fresh_lead_limit) or not is_fresh_lead(lead, settings=settings):
+		return
+
+	agents = tuple({row.get("agent") for row in rows if row.get("agent")})
+	if not agents:
+		return
+
+	fresh_status = get_fresh_lead_status(settings)
+	if not fresh_status:
+		return
+
+	conditions = [
+		"lead_owner in %(agents)s",
+		"status = %(fresh_status)s",
+	]
+	if frappe.db.has_column("CRM Lead", "converted"):
+		conditions.append("ifnull(converted, 0) = 0")
+
+	counts = frappe.db.sql(
+		f"""
+		select lead_owner, count(*) as fresh_lead_count
+		from `tabCRM Lead`
+		where {" and ".join(conditions)}
+		group by lead_owner
+		""",
+		{"agents": agents, "fresh_status": fresh_status},
+		as_dict=True,
+	)
+	count_by_agent = {row.lead_owner: int(row.fresh_lead_count or 0) for row in counts}
+	for row in rows:
+		row["fresh_lead_count"] = count_by_agent.get(row.get("agent"), 0)
+
+
+def is_fresh_lead(lead: dict | None, *, settings: frappe._dict | None = None) -> bool:
+	if not lead:
+		return False
+	fresh_status = get_fresh_lead_status(settings or get_settings())
+	return bool(fresh_status and str(lead.get("status") or "").strip() == fresh_status)
+
+
+def get_fresh_lead_status(settings: frappe._dict | None = None) -> str:
+	settings = settings or get_settings()
+	return str(settings.fresh_lead_status or "New").strip()
+
+
+def get_agent_fresh_lead_count(agent: str, fresh_status: str | None = None) -> int:
+	filters = {
+		"lead_owner": agent,
+		"status": fresh_status or get_fresh_lead_status(),
+	}
+	if frappe.db.has_column("CRM Lead", "converted"):
+		filters["converted"] = 0
+	return int(frappe.db.count("CRM Lead", filters) or 0)
 
 
 def _effective_pipeline(rule: frappe._dict | None, lead: dict) -> str | None:

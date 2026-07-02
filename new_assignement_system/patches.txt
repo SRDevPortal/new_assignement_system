@@ -1,2 +1,3 @@
 new_assignement_system.patches.v1_0.ensure_indexes
 new_assignement_system.patches.v1_0.drop_deprecated_source_id_field
+new_assignement_system.patches.v1_0.ensure_fresh_fifo_indexes

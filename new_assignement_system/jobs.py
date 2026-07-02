@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import frappe
-from frappe.utils import add_to_date, now_datetime
+from frappe.utils import add_to_date, cint, now_datetime
 
 from new_assignement_system.engine.queue import due_queue_names, enqueue_queue_item, mark_retry, try_lock
 from new_assignement_system.engine.service import auto_assign_lead, auto_unassign_lead
@@ -20,15 +20,24 @@ def process_assignment_queue_item(queue_name: str) -> dict | None:
 		else:
 			result = auto_assign_lead(row.lead, event_type=row.event_type, queue=queue_name)
 			status = "Assigned" if result.get("status") == "ok" else "Skipped"
+		values = {
+			"status": status,
+			"error": None,
+			"locked_by": None,
+			"locked_at": None,
+		}
+		if _should_retry_capacity_skip(result):
+			values.update(
+				{
+					"status": "Retry",
+					"next_retry_at": add_to_date(now_datetime(), minutes=1),
+					"error": str(result.get("reason") or "")[:1000],
+				}
+			)
 		frappe.db.set_value(
 			"New Assignement System Queue",
 			queue_name,
-			{
-				"status": status,
-				"error": None,
-				"locked_by": None,
-				"locked_at": None,
-			},
+			values,
 			update_modified=True,
 		)
 		frappe.db.commit()
@@ -37,6 +46,12 @@ def process_assignment_queue_item(queue_name: str) -> dict | None:
 		mark_retry(queue_name, frappe.get_traceback(), row.attempts)
 		frappe.db.commit()
 		return None
+
+
+def _should_retry_capacity_skip(result: dict | None) -> bool:
+	if not result or result.get("status") != "skipped":
+		return False
+	return "fresh lead limit" in str(result.get("reason") or "").lower()
 
 
 def process_due_short_queue(limit: int | None = None) -> None:
@@ -56,6 +71,52 @@ def retry_failed_queue() -> None:
 		""",
 		now_datetime(),
 	)
+
+
+def enqueue_unassigned_fresh_leads(limit: int | None = None) -> int:
+	from new_assignement_system.engine.eligibility import get_fresh_lead_status
+	from new_assignement_system.engine.queue import enqueue_lead
+	from new_assignement_system.engine.service import can_auto_assign_lead
+
+	settings = get_settings()
+	if not settings.enabled or not cint(settings.enable_fresh_lead_limit):
+		return 0
+
+	fresh_status = get_fresh_lead_status(settings)
+	if not fresh_status:
+		return 0
+
+	conditions = [
+		"(lead_owner is null or lead_owner = '')",
+		"status = %(fresh_status)s",
+	]
+	if frappe.db.has_column("CRM Lead", "converted"):
+		conditions.append("ifnull(converted, 0) = 0")
+	if frappe.db.has_column("CRM Lead", "sr_is_archived"):
+		conditions.append("ifnull(sr_is_archived, 0) = 0")
+
+	rows = frappe.db.sql(
+		f"""
+		select name
+		from `tabCRM Lead`
+		where {" and ".join(conditions)}
+		order by creation asc
+		limit %(limit)s
+		""",
+		{
+			"fresh_status": fresh_status,
+			"limit": int(limit or settings.queue_batch_size or 100),
+		},
+		as_dict=True,
+	)
+
+	queued = 0
+	for row in rows:
+		if not can_auto_assign_lead(row.name, event_type="Fresh FIFO"):
+			continue
+		if enqueue_lead(row.name, event_type="Fresh FIFO", priority=20, process_now=False):
+			queued += 1
+	return queued
 
 
 def enqueue_stale_reassignment_candidates() -> None:

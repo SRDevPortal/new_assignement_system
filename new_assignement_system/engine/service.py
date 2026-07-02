@@ -9,7 +9,12 @@ from frappe.utils import cint
 from new_assignement_system.engine.audit import log_assignment
 from new_assignement_system.engine.context import get_lead_context, snapshot_json
 from new_assignement_system.engine.counters import decrement_agent, increment_agent
-from new_assignement_system.engine.eligibility import get_candidate_agents, is_user_session_available
+from new_assignement_system.engine.eligibility import (
+	agent_has_fresh_lead_capacity,
+	get_candidate_agents,
+	is_fresh_lead,
+	is_user_session_available,
+)
 from new_assignement_system.engine.rules import match_rule, match_unassign_rule
 from new_assignement_system.engine.strategies import select_agent
 from new_assignement_system.engine.sync import clear_assignment_helpers, sync_assignment_helpers
@@ -141,8 +146,14 @@ def auto_assign_lead(lead: str, *, event_type: str = "Manual", queue: str | None
 	rule = match_rule(row, event_type=event_type)
 	if not rule:
 		if settings.fallback_user:
-			if not _fallback_allowed(settings.fallback_user, settings):
-				return _skip(lead, "No rule matched; fallback user has no active session", event_type, queue, row=row)
+			if not _fallback_allowed(settings.fallback_user, settings, row):
+				return _skip(
+					lead,
+					"No rule matched; fallback user is not eligible",
+					event_type,
+					queue,
+					row=row,
+				)
 			return assign_lead(
 				lead,
 				settings.fallback_user,
@@ -180,12 +191,21 @@ def _assign_by_rule(
 	candidates = get_candidate_agents(rule, row)
 	selected = select_agent(candidates, strategy, row, rule=rule)
 	if not selected:
+		if cint(settings.enable_fresh_lead_limit) and is_fresh_lead(row, settings=settings):
+			return _skip(
+				lead,
+				f"No active agent below fresh lead limit for rule {rule.name}",
+				event_type,
+				queue,
+				row=row,
+				rule=rule,
+			)
 		fallback = rule.fallback_user or settings.fallback_user
 		if fallback:
-			if not _fallback_allowed(fallback, settings):
+			if not _fallback_allowed(fallback, settings, row):
 				return _skip(
 					lead,
-					f"No available online agent for rule {rule.name}; fallback user has no active session",
+					f"No available online agent for rule {rule.name}; fallback user is not eligible",
 					event_type,
 					queue,
 					row=row,
@@ -276,10 +296,10 @@ def can_auto_unassign_lead(lead: str, *, event_type: str = "Update") -> bool:
 	return bool(match_unassign_rule(row, event_type=event_type))
 
 
-def _fallback_allowed(user: str, settings: frappe._dict) -> bool:
-	if cint(settings.allow_fallback_without_active_session):
-		return True
-	return is_user_session_available(user)
+def _fallback_allowed(user: str, settings: frappe._dict, row: dict | None = None) -> bool:
+	if not is_user_session_available(user):
+		return False
+	return agent_has_fresh_lead_capacity(user, row, settings=settings)
 
 
 def _skip(

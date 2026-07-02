@@ -73,6 +73,9 @@ def on_update(doc, method: str | None = None) -> None:
 	if not settings.enabled or getattr(frappe.flags, "new_assignement_system_in_progress", False):
 		return
 
+	if _fresh_slot_opened(doc, settings):
+		frappe.db.after_commit.add(_enqueue_unassigned_fresh_leads)
+
 	if doc.has_value_changed("lead_owner"):
 		sync_assignment_helpers(doc.name, doc.get("lead_owner"))
 		return
@@ -95,6 +98,27 @@ def on_update(doc, method: str | None = None) -> None:
 
 def _has_changed(doc, fieldname: str) -> bool:
 	return hasattr(doc, fieldname) and doc.has_value_changed(fieldname)
+
+
+def _fresh_slot_opened(doc, settings) -> bool:
+	if not cint(settings.enable_fresh_lead_limit) or not _has_changed(doc, "status"):
+		return False
+
+	before = doc.get_doc_before_save()
+	if not before:
+		return False
+
+	fresh_status = str(settings.fresh_lead_status or "New").strip()
+	return bool(fresh_status and before.get("status") == fresh_status and doc.get("status") != fresh_status)
+
+
+def _enqueue_unassigned_fresh_leads() -> None:
+	from new_assignement_system.jobs import enqueue_unassigned_fresh_leads
+
+	try:
+		enqueue_unassigned_fresh_leads()
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "New Assignement System Fresh FIFO Failed")
 
 
 def _should_override_api_owner(doc, settings) -> bool:

@@ -38,6 +38,7 @@ scheduler_events = {
 		"* * * * *": [
 			"new_assignement_system.jobs.process_due_short_queue",
 			"new_assignement_system.jobs.sync_agent_login_status",
+			"new_assignement_system.jobs.enqueue_unassigned_fresh_leads",
 		],
 		"*/5 * * * *": [
 			"new_assignement_system.jobs.retry_failed_queue",

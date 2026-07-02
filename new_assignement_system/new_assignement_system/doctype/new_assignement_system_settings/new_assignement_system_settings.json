@@ -14,6 +14,10 @@
                         "auto_assign_on_insert",
                         "inline_assign_on_insert",
                         "override_api_owner_when_rule_matches",
+                        "enable_total_capacity_limit",
+                        "enable_fresh_lead_limit",
+                        "fresh_lead_status",
+                        "fresh_lead_limit_per_agent",
                         "step_3_rule_matching_section",
                         "enable_metadata_based_assignment",
                         "default_strategy",
@@ -79,6 +83,37 @@
                        "fieldname":  "override_api_owner_when_rule_matches",
                        "fieldtype":  "Check",
                        "label":  "Replace API Lead Owner When Rule Matches"
+                   },
+                   {
+                       "default":  "1",
+                       "description":  "When enabled, agent Capacity and rule Max Open Leads Per Agent are enforced.",
+                       "fieldname":  "enable_total_capacity_limit",
+                       "fieldtype":  "Check",
+                       "label":  "Enable Total Capacity Limit"
+                   },
+                   {
+                       "default":  "0",
+                       "description":  "When enabled, agents stop receiving fresh leads after they reach the configured fresh lead limit.",
+                       "fieldname":  "enable_fresh_lead_limit",
+                       "fieldtype":  "Check",
+                       "label":  "Enable Fresh Lead Limit"
+                   },
+                   {
+                       "default":  "New",
+                       "depends_on":  "eval:doc.enable_fresh_lead_limit",
+                       "description":  "Lead status counted as fresh for assignment capacity.",
+                       "fieldname":  "fresh_lead_status",
+                       "fieldtype":  "Link",
+                       "label":  "Fresh Lead Status",
+                       "options":  "CRM Lead Status"
+                   },
+                   {
+                       "default":  "5",
+                       "depends_on":  "eval:doc.enable_fresh_lead_limit",
+                       "description":  "Maximum fresh leads an active agent can hold before new fresh leads remain unassigned.",
+                       "fieldname":  "fresh_lead_limit_per_agent",
+                       "fieldtype":  "Int",
+                       "label":  "Fresh Lead Limit Per Agent"
                    },
                    {
                        "fieldname":  "step_3_rule_matching_section",
