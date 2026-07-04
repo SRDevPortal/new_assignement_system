@@ -16,6 +16,8 @@
                         "override_api_owner_when_rule_matches",
                         "enable_total_capacity_limit",
                         "enable_fresh_lead_limit",
+                        "enable_fresh_slot_auto_refill",
+                        "fresh_slot_auto_refill_mode",
                         "fresh_lead_status",
                         "fresh_lead_limit_per_agent",
                         "step_3_rule_matching_section",
@@ -26,6 +28,8 @@
                         "step_4_update_handling_section",
                         "auto_reassign_on_update",
                         "auto_unassign_on_update",
+                        "enable_status_based_assignment",
+                        "status_assignment_users",
                         "stale_reassignment_enabled",
                         "stale_after_minutes",
                         "step_5_assignment_sync_section",
@@ -99,6 +103,23 @@
                        "label":  "Enable Fresh Lead Limit"
                    },
                    {
+                       "default":  "1",
+                       "depends_on":  "eval:doc.enable_fresh_lead_limit",
+                       "description":  "When enabled, unassigned fresh leads are queued again when an agent's fresh lead count drops below the configured limit.",
+                       "fieldname":  "enable_fresh_slot_auto_refill",
+                       "fieldtype":  "Check",
+                       "label":  "Fresh Slot Auto Refill"
+                   },
+                   {
+                       "default":  "Status Change Only",
+                       "depends_on":  "eval:doc.enable_fresh_lead_limit && doc.enable_fresh_slot_auto_refill",
+                       "description":  "Controls which trigger queues unassigned fresh leads when fresh slot refill is enabled.",
+                       "fieldname":  "fresh_slot_auto_refill_mode",
+                       "fieldtype":  "Select",
+                       "label":  "Fresh Slot Auto Refill Mode",
+                       "options":  "Status Change Only\nScheduler Only\nBoth\nDisabled"
+                   },
+                   {
                        "default":  "New",
                        "depends_on":  "eval:doc.enable_fresh_lead_limit",
                        "description":  "Lead status counted as fresh for assignment capacity.",
@@ -163,6 +184,19 @@
                        "fieldname":  "auto_unassign_on_update",
                        "fieldtype":  "Check",
                        "label":  "Unassign Leads When Unassign Rule Matches"
+                   },
+                   {
+                       "default":  "0",
+                       "description":  "When enabled, changing a CRM Lead to a configured status assigns it to the mapped user.",
+                       "fieldname":  "enable_status_based_assignment",
+                       "fieldtype":  "Check",
+                       "label":  "Assign Leads By Status Change"
+                   },
+                   {
+                       "fieldname":  "status_assignment_users",
+                       "fieldtype":  "Table",
+                       "label":  "Status Assignment Users",
+                       "options":  "New Assignement System Status Assignment User"
                    },
                    {
                        "default":  "0",

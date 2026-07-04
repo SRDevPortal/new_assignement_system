@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import frappe
+from frappe.utils import cint
 
+from new_assignement_system.engine.eligibility import get_fresh_lead_status
 from new_assignement_system.engine.service import auto_assign_lead, clear_lead_assignment
+from new_assignement_system.settings import get_settings
 
 
 RULE_CASES = (
@@ -11,6 +14,58 @@ RULE_CASES = (
 	("120250723559390012", "mandeep_mi@sriaas.com"),
 	("120250583820420012", "ankitchaudhary_mi@sriaas.com"),
 )
+
+
+def get_fresh_lead_limit_violations() -> dict:
+	settings = get_settings()
+	limit = int(settings.fresh_lead_limit_per_agent or 0)
+	fresh_status = get_fresh_lead_status(settings)
+	if not settings.enabled or not cint(settings.enable_fresh_lead_limit) or limit <= 0 or not fresh_status:
+		return {"fresh_status": fresh_status, "limit": limit, "violations": []}
+
+	conditions = [
+		"lead_owner is not null",
+		"lead_owner != ''",
+		"status = %(fresh_status)s",
+	]
+	if frappe.db.has_column("CRM Lead", "converted"):
+		conditions.append("ifnull(converted, 0) = 0")
+
+	rows = frappe.db.sql(
+		f"""
+		select lead_owner, count(*) as fresh_lead_count
+		from `tabCRM Lead`
+		where {" and ".join(conditions)}
+		group by lead_owner
+		having count(*) > %(limit)s
+		order by fresh_lead_count desc, lead_owner asc
+		""",
+		{"fresh_status": fresh_status, "limit": limit},
+		as_dict=True,
+	)
+
+	violations = []
+	for row in rows:
+		filters = {"lead_owner": row.lead_owner, "status": fresh_status}
+		if frappe.db.has_column("CRM Lead", "converted"):
+			filters["converted"] = 0
+		leads = frappe.get_all(
+			"CRM Lead",
+			filters=filters,
+			pluck="name",
+			order_by="creation asc",
+			limit_page_length=0,
+		)
+		violations.append(
+			{
+				"agent": row.lead_owner,
+				"fresh_lead_count": int(row.fresh_lead_count or 0),
+				"limit": limit,
+				"leads": leads,
+			}
+		)
+
+	return {"fresh_status": fresh_status, "limit": limit, "violations": violations}
 
 
 def delete_mock_crm_leads() -> dict:

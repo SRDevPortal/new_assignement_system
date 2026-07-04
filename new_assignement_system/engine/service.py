@@ -12,6 +12,8 @@ from new_assignement_system.engine.counters import decrement_agent, increment_ag
 from new_assignement_system.engine.eligibility import (
 	agent_has_fresh_lead_capacity,
 	get_candidate_agents,
+	get_agent_fresh_lead_count,
+	get_fresh_lead_status,
 	is_fresh_lead,
 	is_user_session_available,
 )
@@ -45,6 +47,55 @@ def assign_lead(
 	row = get_lead_context(lead, for_update=True)
 	old_owner = row.get("lead_owner")
 
+	if (
+		old_owner != new_owner
+		and cint(settings.enable_fresh_lead_limit)
+		and is_fresh_lead(row, settings=settings)
+	):
+		with _fresh_capacity_lock(new_owner):
+			row = get_lead_context(lead, for_update=True)
+			old_owner = row.get("lead_owner")
+			fresh_lead_count = get_agent_fresh_lead_count(
+				new_owner,
+				get_fresh_lead_status(settings),
+				for_update=True,
+			)
+			if old_owner != new_owner and not agent_has_fresh_lead_capacity(
+				new_owner,
+				row,
+				settings=settings,
+				fresh_lead_count=fresh_lead_count,
+			):
+				log_assignment(
+					lead=lead,
+					action="Skipped",
+					old_owner=old_owner,
+					new_owner=new_owner,
+					rule=rule,
+					strategy=strategy,
+					queue=queue,
+					triggered_by=triggered_by,
+					reason="Fresh lead limit reached for owner",
+					metadata_snapshot=snapshot_json(row),
+				)
+				return {"status": "skipped", "reason": "fresh_lead_limit_reached", "owner": new_owner}
+			result = _assign_lead_unchecked(
+				lead,
+				new_owner,
+				row=row,
+				old_owner=old_owner,
+				settings=settings,
+				reason=reason,
+				rule=rule,
+				strategy=strategy,
+				queue=queue,
+				source=source,
+				pipeline=pipeline,
+				triggered_by=triggered_by,
+			)
+			frappe.db.commit()
+			return result
+
 	if old_owner == new_owner:
 		if cint(settings.sync_team_from_lead_owner) and has_team_field():
 			frappe.db.set_value("CRM Lead", lead, "team", get_team_for_user(new_owner), update_modified=False)
@@ -63,6 +114,37 @@ def assign_lead(
 		)
 		return {"status": "skipped", "reason": "already_assigned", "owner": new_owner}
 
+	return _assign_lead_unchecked(
+		lead,
+		new_owner,
+		row=row,
+		old_owner=old_owner,
+		settings=settings,
+		reason=reason,
+		rule=rule,
+		strategy=strategy,
+		queue=queue,
+		source=source,
+		pipeline=pipeline,
+		triggered_by=triggered_by,
+	)
+
+
+def _assign_lead_unchecked(
+	lead: str,
+	new_owner: str,
+	*,
+	row: frappe._dict,
+	old_owner: str | None,
+	settings: frappe._dict,
+	reason: str | None = None,
+	rule: str | None = None,
+	strategy: str | None = None,
+	queue: str | None = None,
+	source: str | None = None,
+	pipeline: str | None = None,
+	triggered_by: str | None = None,
+) -> dict:
 	frappe.flags.new_assignement_system_in_progress = True
 	try:
 		values = {"lead_owner": new_owner}
@@ -245,6 +327,18 @@ def _round_robin_lock(rule: str):
 	acquired = frappe.db.sql("select get_lock(%s, %s)", (lock_name, 30))[0][0]
 	if not acquired:
 		frappe.throw(f"Could not acquire Round Robin lock for rule {rule}")
+	try:
+		yield
+	finally:
+		frappe.db.sql("select release_lock(%s)", (lock_name,))
+
+
+@contextmanager
+def _fresh_capacity_lock(agent: str):
+	lock_name = "nas_fresh_" + sha1(str(agent).encode("utf-8")).hexdigest()
+	acquired = frappe.db.sql("select get_lock(%s, %s)", (lock_name, 30))[0][0]
+	if not acquired:
+		frappe.throw(f"Could not acquire Fresh Lead Capacity lock for {agent}")
 	try:
 		yield
 	finally:

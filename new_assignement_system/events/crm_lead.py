@@ -3,16 +3,23 @@ from __future__ import annotations
 import frappe
 from frappe.utils import cint
 
+from new_assignement_system.engine.eligibility import would_exceed_fresh_lead_limit
 from new_assignement_system.engine.queue import enqueue_lead
 from new_assignement_system.engine.rules import match_rule
 from new_assignement_system.engine.service import (
+	assign_lead,
 	auto_assign_lead,
 	auto_unassign_lead,
 	can_auto_unassign_lead,
 )
 from new_assignement_system.engine.sync import sync_assignment_helpers
 from new_assignement_system.integrations.dedupe import should_skip_lead
-from new_assignement_system.settings import get_settings
+from new_assignement_system.settings import (
+	FRESH_SLOT_REFILL_TRIGGER_STATUS_CHANGE,
+	get_settings,
+	get_status_assignment_user,
+	should_run_fresh_slot_auto_refill,
+)
 
 WATCH_FIELDS = {
 	"status",
@@ -39,11 +46,13 @@ def before_validate(doc, method: str | None = None) -> None:
 		return
 
 	settings = get_settings()
-	if not settings.enabled or not doc.is_new():
+	if not settings.enabled:
 		return
 
-	if doc.get("lead_owner") and _should_override_api_owner(doc, settings):
+	if doc.is_new() and doc.get("lead_owner") and _should_override_api_owner(doc, settings):
 		doc.set("lead_owner", None)
+
+	_validate_direct_fresh_capacity_change(doc, settings)
 
 
 def after_insert(doc, method: str | None = None) -> None:
@@ -74,10 +83,14 @@ def on_update(doc, method: str | None = None) -> None:
 		return
 
 	if _fresh_slot_opened(doc, settings):
-		frappe.db.after_commit.add(_enqueue_unassigned_fresh_leads)
+		agent = (doc.get_doc_before_save() or {}).get("lead_owner")
+		frappe.db.after_commit.add(lambda agent=agent: _enqueue_fresh_refill_for_agent(agent))
 
 	if doc.has_value_changed("lead_owner"):
 		sync_assignment_helpers(doc.name, doc.get("lead_owner"))
+		return
+
+	if _assign_by_status_change(doc):
 		return
 
 	if any(_has_changed(doc, fieldname) for fieldname in WATCH_FIELDS):
@@ -100,8 +113,62 @@ def _has_changed(doc, fieldname: str) -> bool:
 	return hasattr(doc, fieldname) and doc.has_value_changed(fieldname)
 
 
+def _validate_direct_fresh_capacity_change(doc, settings) -> None:
+	if not cint(settings.enable_fresh_lead_limit):
+		return
+
+	owner = doc.get("lead_owner")
+	if not owner:
+		return
+
+	fresh_status = str(settings.fresh_lead_status or "New").strip()
+	if not fresh_status or doc.get("status") != fresh_status:
+		return
+
+	if not doc.is_new() and not (_has_changed(doc, "status") or _has_changed(doc, "lead_owner")):
+		return
+
+	row = frappe._dict(doc.as_dict())
+	if not would_exceed_fresh_lead_limit(owner, row, settings=settings):
+		return
+
+	frappe.throw(
+		frappe._("Cannot save this fresh lead for {0} because the user already has {1} fresh leads.").format(
+			owner,
+			settings.fresh_lead_limit_per_agent,
+		),
+		title=frappe._("Fresh Lead Limit Reached"),
+	)
+
+
+def _assign_by_status_change(doc) -> bool:
+	if not _has_changed(doc, "status"):
+		return False
+
+	target_user = get_status_assignment_user(doc.get("status"))
+	if not target_user:
+		return False
+
+	try:
+		assign_lead(
+			doc.name,
+			target_user,
+			reason=f"Status changed to {doc.get('status')}",
+			triggered_by="Status Based Assignment",
+			ignore_permissions=True,
+		)
+	except Exception:
+		frappe.log_error(frappe.get_traceback(), "New Assignement System Status Assignment Failed")
+		raise
+	return True
+
+
 def _fresh_slot_opened(doc, settings) -> bool:
-	if not cint(settings.enable_fresh_lead_limit) or not _has_changed(doc, "status"):
+	if (
+		not cint(settings.enable_fresh_lead_limit)
+		or not should_run_fresh_slot_auto_refill(FRESH_SLOT_REFILL_TRIGGER_STATUS_CHANGE, settings)
+		or not _has_changed(doc, "status")
+	):
 		return False
 
 	before = doc.get_doc_before_save()
@@ -112,11 +179,12 @@ def _fresh_slot_opened(doc, settings) -> bool:
 	return bool(fresh_status and before.get("status") == fresh_status and doc.get("status") != fresh_status)
 
 
-def _enqueue_unassigned_fresh_leads() -> None:
-	from new_assignement_system.jobs import enqueue_unassigned_fresh_leads
+def _enqueue_fresh_refill_for_agent(agent: str | None = None) -> None:
+	from new_assignement_system.jobs import enqueue_fresh_refill_for_agent
 
 	try:
-		enqueue_unassigned_fresh_leads()
+		if agent:
+			enqueue_fresh_refill_for_agent(agent)
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "New Assignement System Fresh FIFO Failed")
 

@@ -219,6 +219,21 @@ def agent_has_fresh_lead_capacity(
 	return int(fresh_lead_count or 0) < limit
 
 
+def would_exceed_fresh_lead_limit(
+	agent: str | None,
+	lead: dict | None = None,
+	*,
+	settings: frappe._dict | None = None,
+	fresh_lead_count: int | None = None,
+) -> bool:
+	return not agent_has_fresh_lead_capacity(
+		agent,
+		lead,
+		settings=settings,
+		fresh_lead_count=fresh_lead_count,
+	)
+
+
 def attach_fresh_lead_counts(
 	rows: list[dict],
 	lead: dict | None = None,
@@ -271,13 +286,30 @@ def get_fresh_lead_status(settings: frappe._dict | None = None) -> str:
 	return str(settings.fresh_lead_status or "New").strip()
 
 
-def get_agent_fresh_lead_count(agent: str, fresh_status: str | None = None) -> int:
+def get_agent_fresh_lead_count(agent: str, fresh_status: str | None = None, *, for_update: bool = False) -> int:
 	filters = {
 		"lead_owner": agent,
 		"status": fresh_status or get_fresh_lead_status(),
 	}
 	if frappe.db.has_column("CRM Lead", "converted"):
 		filters["converted"] = 0
+	if for_update:
+		conditions = [
+			"lead_owner = %(lead_owner)s",
+			"status = %(status)s",
+		]
+		if "converted" in filters:
+			conditions.append("ifnull(converted, 0) = 0")
+		rows = frappe.db.sql(
+			f"""
+			select name
+			from `tabCRM Lead`
+			where {" and ".join(conditions)}
+			for update
+			""",
+			filters,
+		)
+		return len(rows)
 	return int(frappe.db.count("CRM Lead", filters) or 0)
 
 

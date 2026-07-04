@@ -5,7 +5,14 @@ from frappe.utils import add_to_date, cint, now_datetime
 
 from new_assignement_system.engine.queue import due_queue_names, enqueue_queue_item, mark_retry, try_lock
 from new_assignement_system.engine.service import auto_assign_lead, auto_unassign_lead
-from new_assignement_system.settings import get_settings
+from new_assignement_system.settings import (
+	FRESH_SLOT_REFILL_TRIGGER_SCHEDULER,
+	FRESH_SLOT_REFILL_TRIGGER_STATUS_CHANGE,
+	get_settings,
+	should_run_fresh_slot_auto_refill,
+)
+
+FRESH_REFILL_SCAN_MULTIPLIER = 5
 
 
 def process_assignment_queue_item(queue_name: str) -> dict | None:
@@ -26,7 +33,7 @@ def process_assignment_queue_item(queue_name: str) -> dict | None:
 			"locked_by": None,
 			"locked_at": None,
 		}
-		if _should_retry_capacity_skip(result):
+		if cint(get_settings().enable_fresh_slot_auto_refill) and _should_retry_capacity_skip(result):
 			values.update(
 				{
 					"status": "Retry",
@@ -79,7 +86,11 @@ def enqueue_unassigned_fresh_leads(limit: int | None = None) -> int:
 	from new_assignement_system.engine.service import can_auto_assign_lead
 
 	settings = get_settings()
-	if not settings.enabled or not cint(settings.enable_fresh_lead_limit):
+	if (
+		not settings.enabled
+		or not cint(settings.enable_fresh_lead_limit)
+		or not should_run_fresh_slot_auto_refill(FRESH_SLOT_REFILL_TRIGGER_SCHEDULER, settings)
+	):
 		return 0
 
 	fresh_status = get_fresh_lead_status(settings)
@@ -117,6 +128,120 @@ def enqueue_unassigned_fresh_leads(limit: int | None = None) -> int:
 		if enqueue_lead(row.name, event_type="Fresh FIFO", priority=20, process_now=False):
 			queued += 1
 	return queued
+
+
+def enqueue_fresh_refill_for_agent(agent: str | None, *, max_slots: int | None = None) -> None:
+	settings = get_settings()
+	if not agent or not settings.enabled or not cint(settings.enable_fresh_lead_limit):
+		return
+	if not should_run_fresh_slot_auto_refill(FRESH_SLOT_REFILL_TRIGGER_STATUS_CHANGE, settings):
+		return
+
+	cache_key = f"new_assignement_system:fresh_refill_agent:{agent}"
+	if frappe.cache().get_value(cache_key):
+		return
+	frappe.cache().set_value(cache_key, 1, expires_in_sec=5)
+
+	frappe.enqueue(
+		"new_assignement_system.jobs.refill_fresh_slots_for_agent",
+		queue=settings.default_queue,
+		timeout=300,
+		agent=agent,
+		max_slots=max_slots,
+	)
+
+
+def refill_fresh_slots_for_agent(agent: str, max_slots: int | None = None) -> dict:
+	from new_assignement_system.engine.context import get_lead_context
+	from new_assignement_system.engine.eligibility import (
+		agent_has_fresh_lead_capacity,
+		get_agent_fresh_lead_count,
+		get_candidate_agents,
+		get_fresh_lead_status,
+	)
+	from new_assignement_system.engine.rules import match_rule
+	from new_assignement_system.engine.service import assign_lead
+
+	settings = get_settings()
+	if not agent or not settings.enabled or not cint(settings.enable_fresh_lead_limit):
+		return {"status": "skipped", "reason": "disabled", "assigned": 0}
+	if not should_run_fresh_slot_auto_refill(FRESH_SLOT_REFILL_TRIGGER_STATUS_CHANGE, settings):
+		return {"status": "skipped", "reason": "mode_disabled", "assigned": 0}
+
+	fresh_status = get_fresh_lead_status(settings)
+	if not fresh_status:
+		return {"status": "skipped", "reason": "missing_fresh_status", "assigned": 0}
+
+	limit = int(settings.fresh_lead_limit_per_agent or 0)
+	if limit <= 0:
+		return {"status": "skipped", "reason": "missing_limit", "assigned": 0}
+
+	current_count = get_agent_fresh_lead_count(agent, fresh_status)
+	available_slots = max(0, limit - current_count)
+	if max_slots is not None:
+		available_slots = min(available_slots, int(max_slots or 0))
+	if available_slots <= 0:
+		return {"status": "skipped", "reason": "no_capacity", "assigned": 0}
+
+	candidates = _unassigned_fresh_lead_names(
+		fresh_status,
+		limit=max(int(settings.queue_batch_size or 100), available_slots * FRESH_REFILL_SCAN_MULTIPLIER),
+	)
+
+	assigned = []
+	checked = 0
+	for lead in candidates:
+		if len(assigned) >= available_slots:
+			break
+		checked += 1
+		row = get_lead_context(lead)
+		rule = match_rule(row, event_type="Fresh FIFO")
+		if not rule:
+			continue
+		rule_candidates = get_candidate_agents(rule, row)
+		if not any(candidate.get("agent") == agent for candidate in rule_candidates):
+			continue
+		if not agent_has_fresh_lead_capacity(agent, row, settings=settings):
+			break
+
+		result = assign_lead(
+			lead,
+			agent,
+			reason=f"Fresh slot refill by rule {rule.name}",
+			rule=rule.name,
+			strategy=rule.get("strategy"),
+			triggered_by="Fresh FIFO",
+			ignore_permissions=True,
+		)
+		frappe.db.commit()
+		if result.get("status") == "ok":
+			assigned.append(lead)
+
+	return {"status": "ok", "agent": agent, "assigned": len(assigned), "leads": assigned, "checked": checked}
+
+
+def _unassigned_fresh_lead_names(fresh_status: str, *, limit: int) -> list[str]:
+	conditions = [
+		"(lead_owner is null or lead_owner = '')",
+		"status = %(fresh_status)s",
+	]
+	if frappe.db.has_column("CRM Lead", "converted"):
+		conditions.append("ifnull(converted, 0) = 0")
+	if frappe.db.has_column("CRM Lead", "sr_is_archived"):
+		conditions.append("ifnull(sr_is_archived, 0) = 0")
+
+	rows = frappe.db.sql(
+		f"""
+		select name
+		from `tabCRM Lead`
+		where {" and ".join(conditions)}
+		order by creation asc
+		limit %(limit)s
+		""",
+		{"fresh_status": fresh_status, "limit": int(limit)},
+		as_dict=True,
+	)
+	return [row.name for row in rows]
 
 
 def enqueue_stale_reassignment_candidates() -> None:
