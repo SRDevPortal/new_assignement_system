@@ -187,7 +187,7 @@
                    },
                    {
                        "default":  "0",
-                       "description":  "When enabled, changing a CRM Lead to a configured status assigns it to the mapped user.",
+                       "description":  "When enabled, changing a CRM Lead to a configured status assigns it to the mapped user and optionally updates pipeline.",
                        "fieldname":  "enable_status_based_assignment",
                        "fieldtype":  "Check",
                        "label":  "Assign Leads By Status Change"

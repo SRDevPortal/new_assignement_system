@@ -95,7 +95,7 @@ def should_run_fresh_slot_auto_refill(trigger: str, settings: frappe._dict | Non
 	return False
 
 
-def get_status_assignment_user(status: str | None) -> str | None:
+def get_status_assignment_rule(status: str | None) -> frappe._dict | None:
 	if not status:
 		return None
 	if not frappe.db.exists("DocType", "New Assignement System Settings"):
@@ -114,5 +114,13 @@ def get_status_assignment_user(status: str | None) -> str | None:
 	status = str(status).strip()
 	for row in doc.get("status_assignment_users") or []:
 		if row.get("enabled") and str(row.get("lead_status") or "").strip() == status:
-			return row.get("assign_to_user")
+			return frappe._dict(
+				assign_to_user=row.get("assign_to_user"),
+				target_pipeline=row.get("target_pipeline"),
+			)
 	return None
+
+
+def get_status_assignment_user(status: str | None) -> str | None:
+	rule = get_status_assignment_rule(status)
+	return rule.assign_to_user if rule else None

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import frappe
-from frappe.utils import cint
+from frappe.utils import cint, get_datetime, now_datetime
 
 from new_assignement_system.engine.context import (
 	get_campaign,
@@ -14,6 +14,13 @@ from new_assignement_system.settings import get_settings
 
 FILTER_MATCH_ALL = "Match All Configured Filters"
 FILTER_MATCH_ANY = "Match Any Configured Filter"
+
+REASSIGNMENT_FIELD_MAP = {
+	"lead_status": "status",
+	"pipeline": "sr_lead_pipeline",
+	"source_id": "sr_w_source_id",
+	"lead_owner": "lead_owner",
+}
 
 
 def match_rule(lead: dict, *, event_type: str | None = None) -> frappe._dict | None:
@@ -57,6 +64,10 @@ def match_rule(lead: dict, *, event_type: str | None = None) -> frappe._dict | N
 	for rule in rules:
 		rule = frappe._dict(rule)
 		if _matches_rule(rule, lead, event_type=event_type):
+			target_values = get_reassignment_target_values(rule.name, lead)
+			if target_values is None:
+				continue
+			rule.reassignment_target_values = target_values
 			return rule
 	return None
 
@@ -100,7 +111,12 @@ def _rule_fields(fieldnames: list[str]) -> list[str]:
 
 
 def _matches_rule(rule: frappe._dict, lead: dict, *, event_type: str | None = None) -> bool:
-	if cint(rule.only_if_unassigned) and lead.get("lead_owner") and event_type not in {"Reassign", "Stale"}:
+	if (
+		cint(rule.only_if_unassigned)
+		and lead.get("lead_owner")
+		and event_type not in {"Reassign", "Stale"}
+		and not has_reassignment_match_rows(rule.name)
+	):
 		return False
 
 	filter_results = []
@@ -137,6 +153,122 @@ def _matches_rule(rule: frappe._dict, lead: dict, *, event_type: str | None = No
 	if not filter_results:
 		return True
 	return any(filter_results) if _is_match_any(rule) else all(filter_results)
+
+
+def get_reassignment_target_values(rule_name: str | None, lead: dict) -> dict | None:
+	if not rule_name or not frappe.db.exists("DocType", "New Assignement System Reassignment Match"):
+		return {}
+
+	match_rows = frappe.get_all(
+		"New Assignement System Reassignment Match",
+		filters={
+			"parent": rule_name,
+			"parenttype": "New Assignement System Rule",
+			"parentfield": "reassignment_existing_values",
+			"enabled": 1,
+		},
+		fields=[
+			"idx",
+			"lead_status",
+			"pipeline",
+			"source_id",
+			"stale_time_days",
+			"lead_owner",
+		],
+		order_by="idx asc",
+		limit_page_length=0,
+	)
+	if not match_rows:
+		return {}
+
+	for row in match_rows:
+		row = frappe._dict(row)
+		if not _matches_reassignment_row(row, lead):
+			continue
+		target = _get_reassignment_target_row(rule_name, row.idx)
+		if target:
+			return _target_row_to_updates(target)
+		return {}
+	return None
+
+
+def has_reassignment_match_rows(rule_name: str | None) -> bool:
+	if not rule_name or not frappe.db.exists("DocType", "New Assignement System Reassignment Match"):
+		return False
+	return bool(
+		frappe.db.exists(
+			"New Assignement System Reassignment Match",
+			{
+				"parent": rule_name,
+				"parenttype": "New Assignement System Rule",
+				"parentfield": "reassignment_existing_values",
+				"enabled": 1,
+			},
+		)
+	)
+
+
+def _matches_reassignment_row(row: frappe._dict, lead: dict) -> bool:
+	return (
+		_matches_optional(row.lead_status, lead.get("status"))
+		and _matches_optional(row.pipeline, get_pipeline(lead))
+		and _matches_optional(row.source_id, get_source_id(lead))
+		and _matches_stale_days(row.stale_time_days, lead.get("creation"))
+		and _matches_optional(row.lead_owner, lead.get("lead_owner"))
+	)
+
+
+def _get_reassignment_target_row(rule_name: str, idx: int) -> frappe._dict | None:
+	if not frappe.db.exists("DocType", "New Assignement System Reassignment Target"):
+		return None
+
+	rows = frappe.get_all(
+		"New Assignement System Reassignment Target",
+		filters={
+			"parent": rule_name,
+			"parenttype": "New Assignement System Rule",
+			"parentfield": "reassignment_new_values",
+			"enabled": 1,
+			"idx": idx,
+		},
+		fields=[
+			"lead_status",
+			"pipeline",
+			"source_id",
+			"lead_owner",
+		],
+		limit_page_length=1,
+	)
+	if rows:
+		return frappe._dict(rows[0])
+
+	rows = frappe.get_all(
+		"New Assignement System Reassignment Target",
+		filters={
+			"parent": rule_name,
+			"parenttype": "New Assignement System Rule",
+			"parentfield": "reassignment_new_values",
+			"enabled": 1,
+		},
+		fields=[
+			"lead_status",
+			"pipeline",
+			"source_id",
+			"lead_owner",
+		],
+		order_by="idx asc",
+		limit_page_length=1,
+	)
+	return frappe._dict(rows[0]) if rows else None
+
+
+def _target_row_to_updates(row: frappe._dict) -> dict:
+	updates = {}
+	for source_field, lead_field in REASSIGNMENT_FIELD_MAP.items():
+		value = row.get(source_field)
+		if value not in (None, ""):
+			updates[lead_field] = value
+	return updates
 
 
 def _is_match_any(rule: frappe._dict) -> bool:
@@ -189,6 +321,28 @@ def _matches(expected, actual) -> bool:
 	if expected in (None, ""):
 		return True
 	return str(expected).strip() == str(actual or "").strip()
+
+
+def _matches_optional(expected, actual) -> bool:
+	if expected in (None, ""):
+		return True
+	return str(expected).strip() == str(actual or "").strip()
+
+
+def _matches_stale_days(expected_days, creation) -> bool:
+	if expected_days in (None, "", 0, 0.0):
+		return True
+	if not creation:
+		return False
+	try:
+		days = float(expected_days)
+		created_at = get_datetime(creation)
+	except Exception:
+		return False
+	if days <= 0:
+		return True
+	age_seconds = (now_datetime() - created_at).total_seconds()
+	return age_seconds >= days * 24 * 60 * 60
 
 
 def _has_bound(value) -> bool:

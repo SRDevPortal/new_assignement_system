@@ -17,7 +17,7 @@ from new_assignement_system.integrations.dedupe import should_skip_lead
 from new_assignement_system.settings import (
 	FRESH_SLOT_REFILL_TRIGGER_STATUS_CHANGE,
 	get_settings,
-	get_status_assignment_user,
+	get_status_assignment_rule,
 	should_run_fresh_slot_auto_refill,
 )
 
@@ -145,15 +145,16 @@ def _assign_by_status_change(doc) -> bool:
 	if not _has_changed(doc, "status"):
 		return False
 
-	target_user = get_status_assignment_user(doc.get("status"))
-	if not target_user:
+	assignment_rule = get_status_assignment_rule(doc.get("status"))
+	if not assignment_rule or not assignment_rule.assign_to_user:
 		return False
 
 	try:
 		assign_lead(
 			doc.name,
-			target_user,
+			assignment_rule.assign_to_user,
 			reason=f"Status changed to {doc.get('status')}",
+			pipeline=assignment_rule.target_pipeline,
 			triggered_by="Status Based Assignment",
 			ignore_permissions=True,
 		)

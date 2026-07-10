@@ -35,6 +35,7 @@ def assign_lead(
 	queue: str | None = None,
 	source: str | None = None,
 	pipeline: str | None = None,
+	lead_updates: dict | None = None,
 	triggered_by: str | None = None,
 	ignore_permissions: bool = False,
 ) -> dict:
@@ -91,12 +92,14 @@ def assign_lead(
 				queue=queue,
 				source=source,
 				pipeline=pipeline,
+				lead_updates=lead_updates,
 				triggered_by=triggered_by,
 			)
 			frappe.db.commit()
 			return result
 
 	if old_owner == new_owner:
+		apply_lead_updates(lead, source=source, pipeline=pipeline, lead_updates=lead_updates)
 		if cint(settings.sync_team_from_lead_owner) and has_team_field():
 			frappe.db.set_value("CRM Lead", lead, "team", get_team_for_user(new_owner), update_modified=False)
 		sync_assignment_helpers(lead, new_owner, description="Lead Owner")
@@ -126,6 +129,7 @@ def assign_lead(
 		queue=queue,
 		source=source,
 		pipeline=pipeline,
+		lead_updates=lead_updates,
 		triggered_by=triggered_by,
 	)
 
@@ -143,6 +147,7 @@ def _assign_lead_unchecked(
 	queue: str | None = None,
 	source: str | None = None,
 	pipeline: str | None = None,
+	lead_updates: dict | None = None,
 	triggered_by: str | None = None,
 ) -> dict:
 	frappe.flags.new_assignement_system_in_progress = True
@@ -150,10 +155,7 @@ def _assign_lead_unchecked(
 		values = {"lead_owner": new_owner}
 		if cint(settings.sync_team_from_lead_owner) and has_team_field():
 			values["team"] = get_team_for_user(new_owner)
-		if source:
-			values["source"] = source
-		if pipeline and frappe.db.has_column("CRM Lead", "sr_lead_pipeline"):
-			values["sr_lead_pipeline"] = pipeline
+		values.update(get_lead_update_values(source=source, pipeline=pipeline, lead_updates=lead_updates))
 		frappe.db.set_value("CRM Lead", lead, values)
 		if old_owner:
 			decrement_agent(old_owner)
@@ -215,6 +217,36 @@ def reassign_lead(lead: str, new_owner: str, **kwargs) -> dict:
 	return assign_lead(lead, new_owner, **kwargs)
 
 
+def apply_lead_updates(
+	lead: str,
+	*,
+	source: str | None = None,
+	pipeline: str | None = None,
+	lead_updates: dict | None = None,
+) -> None:
+	values = get_lead_update_values(source=source, pipeline=pipeline, lead_updates=lead_updates)
+	if values:
+		frappe.db.set_value("CRM Lead", lead, values)
+
+
+def get_lead_update_values(
+	*,
+	source: str | None = None,
+	pipeline: str | None = None,
+	lead_updates: dict | None = None,
+) -> dict:
+	values = {}
+	if source:
+		values["source"] = source
+	if pipeline:
+		values["sr_lead_pipeline"] = pipeline
+	for fieldname, value in (lead_updates or {}).items():
+		if fieldname == "lead_owner" or value in (None, ""):
+			continue
+		values[fieldname] = value
+	return {fieldname: value for fieldname, value in values.items() if frappe.db.has_column("CRM Lead", fieldname)}
+
+
 def auto_assign_lead(lead: str, *, event_type: str = "Manual", queue: str | None = None) -> dict:
 	settings = get_settings()
 	if not settings.enabled:
@@ -270,6 +302,24 @@ def _assign_by_rule(
 	queue: str | None,
 	settings: frappe._dict,
 ) -> dict:
+	reassignment_values = dict(rule.get("reassignment_target_values") or {})
+	target_owner = reassignment_values.pop("lead_owner", None)
+
+	if target_owner:
+		return assign_lead(
+			lead,
+			target_owner,
+			reason=f"Auto reassignment by rule {rule.name}",
+			rule=rule.name,
+			strategy=strategy,
+			queue=queue,
+			source=rule.target_source,
+			pipeline=rule.get("target_pipeline"),
+			lead_updates=reassignment_values,
+			triggered_by=event_type,
+			ignore_permissions=True,
+		)
+
 	candidates = get_candidate_agents(rule, row)
 	selected = select_agent(candidates, strategy, row, rule=rule)
 	if not selected:
@@ -302,6 +352,7 @@ def _assign_by_rule(
 				queue=queue,
 				source=rule.target_source,
 				pipeline=rule.get("target_pipeline"),
+				lead_updates=reassignment_values,
 				triggered_by=event_type,
 				ignore_permissions=True,
 			)
@@ -316,6 +367,7 @@ def _assign_by_rule(
 		queue=queue,
 		source=rule.target_source,
 		pipeline=rule.get("target_pipeline"),
+		lead_updates=reassignment_values,
 		triggered_by=event_type,
 		ignore_permissions=True,
 	)

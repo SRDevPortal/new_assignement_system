@@ -1,0 +1,72 @@
+{
+ "actions": [],
+ "allow_read": 1,
+ "creation": "2026-07-10 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "enabled",
+  "lead_status",
+  "pipeline",
+  "source_id",
+  "stale_time_days",
+  "lead_owner"
+ ],
+ "fields": [
+  {
+   "default": "1",
+   "fieldname": "enabled",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Enabled"
+  },
+  {
+   "fieldname": "lead_status",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Lead Status",
+   "options": "CRM Lead Status"
+  },
+  {
+   "fieldname": "pipeline",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Pipeline",
+   "options": "SR Lead Pipeline"
+  },
+  {
+   "fieldname": "source_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Source ID"
+  },
+  {
+   "description": "Matches when the lead age is at least this many days. Blank means ignore.",
+   "fieldname": "stale_time_days",
+   "fieldtype": "Float",
+   "in_list_view": 1,
+   "label": "Stale Time In Days"
+  },
+  {
+   "fieldname": "lead_owner",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Lead Owner",
+   "options": "User"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-07-10 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "New Assignement System",
+ "name": "New Assignement System Reassignment Match",
+ "owner": "Administrator",
+ "permissions": [],
+ "quick_entry": 1,
+ "sort_field": "idx",
+ "sort_order": "ASC",
+ "track_changes": 1
+}

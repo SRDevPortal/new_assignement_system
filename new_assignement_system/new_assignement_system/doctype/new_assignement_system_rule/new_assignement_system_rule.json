@@ -29,6 +29,9 @@
                         "lead_score_max",
                         "metadata_filters_section",
                         "metadata_filters",
+                        "reassignment_section",
+                        "reassignment_existing_values",
+                        "reassignment_new_values",
                         "assignment_section",
                         "strategy",
                         "team",
@@ -236,6 +239,27 @@
                        "fieldtype":  "Table",
                        "label":  "Metadata Filters",
                        "options":  "New Assignement System Metadata Filter"
+                   },
+                   {
+                       "collapsible":  1,
+                       "description":  "Optional paired old-to-new lead value rules. Blank cells are ignored.",
+                       "fieldname":  "reassignment_section",
+                       "fieldtype":  "Section Break",
+                       "label":  "Reassignment Value Rules"
+                   },
+                   {
+                       "description":  "Existing lead values to match. All non-blank values in a row must match.",
+                       "fieldname":  "reassignment_existing_values",
+                       "fieldtype":  "Table",
+                       "label":  "Existing Lead Values",
+                       "options":  "New Assignement System Reassignment Match"
+                   },
+                   {
+                       "description":  "New lead values to apply. Row numbers are paired with Existing Lead Values; blank cells are skipped.",
+                       "fieldname":  "reassignment_new_values",
+                       "fieldtype":  "Table",
+                       "label":  "New Lead Values",
+                       "options":  "New Assignement System Reassignment Target"
                    },
                    {
                        "fieldname":  "unassign_section",

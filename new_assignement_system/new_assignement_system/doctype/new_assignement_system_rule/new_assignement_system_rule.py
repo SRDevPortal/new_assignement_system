@@ -15,6 +15,7 @@ class NewAssignementSystemRule(Document):
 		if not self.filter_match_mode:
 			self.filter_match_mode = "Match All Configured Filters"
 		self.validate_assign_to_users()
+		self.validate_reassignment_values()
 		self.validate_metadata_filters("metadata_filters")
 		self.validate_metadata_filters("unassign_metadata_filters")
 		if self.metadata_filters_json:
@@ -59,3 +60,10 @@ class NewAssignementSystemRule(Document):
 				frappe.throw("Metadata filter fieldname is required.")
 			if not row.operator:
 				row.operator = "Equals"
+
+	def validate_reassignment_values(self) -> None:
+		for row in self.get("reassignment_new_values", []):
+			if not row.enabled or not row.lead_owner:
+				continue
+			if not frappe.db.exists("User", {"name": row.lead_owner, "enabled": 1}):
+				frappe.throw(f"Reassignment target user is invalid or disabled: {row.lead_owner}")
