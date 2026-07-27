@@ -8,6 +8,7 @@ from frappe.utils import cint
 from frappe.utils import get_time, now_datetime
 
 from new_assignement_system.engine.context import get_campaign, get_pipeline
+from new_assignement_system.integrations.dedupe import dedupe_ready_sql_conditions
 from new_assignement_system.integrations.role_permissions import agent_allowed_for_pipeline
 from new_assignement_system.integrations.team import get_active_team_members
 from new_assignement_system.settings import get_settings
@@ -257,7 +258,8 @@ def attach_fresh_lead_counts(
 		"status = %(fresh_status)s",
 	]
 	if frappe.db.has_column("CRM Lead", "converted"):
-		conditions.append("ifnull(converted, 0) = 0")
+		conditions.append("converted = 0")
+	conditions.extend(dedupe_ready_sql_conditions())
 
 	counts = frappe.db.sql(
 		f"""
@@ -299,7 +301,8 @@ def get_agent_fresh_lead_count(agent: str, fresh_status: str | None = None, *, f
 			"status = %(status)s",
 		]
 		if "converted" in filters:
-			conditions.append("ifnull(converted, 0) = 0")
+			conditions.append("converted = 0")
+		conditions.extend(dedupe_ready_sql_conditions())
 		rows = frappe.db.sql(
 			f"""
 			select name
@@ -310,7 +313,24 @@ def get_agent_fresh_lead_count(agent: str, fresh_status: str | None = None, *, f
 			filters,
 		)
 		return len(rows)
-	return int(frappe.db.count("CRM Lead", filters) or 0)
+	conditions = [
+		"lead_owner = %(lead_owner)s",
+		"status = %(status)s",
+	]
+	if "converted" in filters:
+		conditions.append("converted = 0")
+	conditions.extend(dedupe_ready_sql_conditions())
+	return int(
+		frappe.db.sql(
+			f"""
+			select count(*)
+			from `tabCRM Lead`
+			where {" and ".join(conditions)}
+			""",
+			filters,
+		)[0][0]
+		or 0
+	)
 
 
 def _effective_pipeline(rule: frappe._dict | None, lead: dict) -> str | None:

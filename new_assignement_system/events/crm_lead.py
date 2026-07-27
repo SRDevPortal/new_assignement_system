@@ -67,6 +67,10 @@ def after_insert(doc, method: str | None = None) -> None:
 		sync_assignment_helpers(doc.name, doc.get("lead_owner"))
 		return
 
+	skip, _reason = should_skip_lead(doc)
+	if skip:
+		return
+
 	if settings.auto_assign_on_insert:
 		if cint(settings.inline_assign_on_insert) or not cint(settings.queue_enabled):
 			frappe.db.after_commit.add(lambda lead=doc.name: _assign_insert_inline_or_queue(lead))
@@ -207,7 +211,9 @@ def _assign_insert_inline_or_queue(lead: str) -> None:
 	if not frappe.db.exists("CRM Lead", lead):
 		return
 	try:
-		auto_assign_lead(lead, event_type="Insert")
+		result = auto_assign_lead(lead, event_type="Insert")
+		if result.get("status") == "skipped" and result.get("retryable"):
+			enqueue_lead(lead, event_type="Insert", process_now=True)
 		frappe.db.commit()
 	except Exception:
 		frappe.log_error(frappe.get_traceback(), "Inline New Assignement System Failed")

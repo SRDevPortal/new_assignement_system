@@ -3,6 +3,8 @@ from __future__ import annotations
 import frappe
 from frappe.utils import now_datetime
 
+from new_assignement_system.integrations.dedupe import dedupe_ready_sql_conditions
+
 
 def ensure_agent_state(agent: str, team: str | None = None) -> str:
 	name = agent
@@ -101,13 +103,17 @@ def rebuild_all() -> int:
 		"""
 	)
 
+	conditions = [
+		"lead_owner is not null",
+		"lead_owner != ''",
+		"converted = 0",
+		*dedupe_ready_sql_conditions(),
+	]
 	rows = frappe.db.sql(
-		"""
+		f"""
 		select lead_owner, count(*) as open_leads
 		from `tabCRM Lead`
-		where lead_owner is not null
-		  and lead_owner != ''
-		  and ifnull(converted, 0) = 0
+		where {" and ".join(conditions)}
 		group by lead_owner
 		""",
 		as_dict=True,
@@ -133,6 +139,51 @@ def rebuild_all() -> int:
 		)
 		count += open_leads
 	return count
+
+
+def reconcile_agent_open_lead_count(agent: str | None) -> int:
+	"""Set one agent's load from canonical active leads after a dedupe merge."""
+	if not agent:
+		return 0
+
+	name = ensure_agent_state(agent)
+	conditions = [
+		"lead_owner = %(agent)s",
+		"converted = 0",
+		*dedupe_ready_sql_conditions(),
+	]
+	open_leads = int(
+		frappe.db.sql(
+			f"""
+			select count(*)
+			from `tabCRM Lead`
+			where {" and ".join(conditions)}
+			""",
+			{"agent": agent},
+		)[0][0]
+		or 0
+	)
+	frappe.db.sql(
+		"""
+		update `tabNew Assignement System Agent State`
+		set current_open_leads = %(open_leads)s,
+			load_score = case
+				when ifnull(capacity, 0) > 0
+				then %(open_leads)s / (capacity * ifnull(nullif(weight, 0), 1))
+				else %(open_leads)s / ifnull(nullif(weight, 0), 1)
+			end,
+			modified = %(modified)s,
+			modified_by = %(modified_by)s
+		where name = %(name)s
+		""",
+		{
+			"open_leads": open_leads,
+			"modified": now_datetime(),
+			"modified_by": frappe.session.user,
+			"name": name,
+		},
+	)
+	return open_leads
 
 
 def reset_daily_counts() -> None:

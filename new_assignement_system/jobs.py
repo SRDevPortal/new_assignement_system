@@ -33,7 +33,7 @@ def process_assignment_queue_item(queue_name: str) -> dict | None:
 			"locked_by": None,
 			"locked_at": None,
 		}
-		if cint(get_settings().enable_fresh_slot_auto_refill) and _should_retry_capacity_skip(result):
+		if _should_retry_assignment(result):
 			values.update(
 				{
 					"status": "Retry",
@@ -55,10 +55,10 @@ def process_assignment_queue_item(queue_name: str) -> dict | None:
 		return None
 
 
-def _should_retry_capacity_skip(result: dict | None) -> bool:
+def _should_retry_assignment(result: dict | None) -> bool:
 	if not result or result.get("status") != "skipped":
 		return False
-	return "fresh lead limit" in str(result.get("reason") or "").lower()
+	return bool(result.get("retryable"))
 
 
 def process_due_short_queue(limit: int | None = None) -> None:
@@ -84,6 +84,7 @@ def enqueue_unassigned_fresh_leads(limit: int | None = None) -> int:
 	from new_assignement_system.engine.eligibility import get_fresh_lead_status
 	from new_assignement_system.engine.queue import enqueue_lead
 	from new_assignement_system.engine.service import can_auto_assign_lead
+	from new_assignement_system.integrations.dedupe import dedupe_ready_sql_conditions
 
 	settings = get_settings()
 	if (
@@ -102,9 +103,8 @@ def enqueue_unassigned_fresh_leads(limit: int | None = None) -> int:
 		"status = %(fresh_status)s",
 	]
 	if frappe.db.has_column("CRM Lead", "converted"):
-		conditions.append("ifnull(converted, 0) = 0")
-	if frappe.db.has_column("CRM Lead", "sr_is_archived"):
-		conditions.append("ifnull(sr_is_archived, 0) = 0")
+		conditions.append("converted = 0")
+	conditions.extend(dedupe_ready_sql_conditions())
 
 	rows = frappe.db.sql(
 		f"""
@@ -221,14 +221,15 @@ def refill_fresh_slots_for_agent(agent: str, max_slots: int | None = None) -> di
 
 
 def _unassigned_fresh_lead_names(fresh_status: str, *, limit: int) -> list[str]:
+	from new_assignement_system.integrations.dedupe import dedupe_ready_sql_conditions
+
 	conditions = [
 		"(lead_owner is null or lead_owner = '')",
 		"status = %(fresh_status)s",
 	]
 	if frappe.db.has_column("CRM Lead", "converted"):
-		conditions.append("ifnull(converted, 0) = 0")
-	if frappe.db.has_column("CRM Lead", "sr_is_archived"):
-		conditions.append("ifnull(sr_is_archived, 0) = 0")
+		conditions.append("converted = 0")
+	conditions.extend(dedupe_ready_sql_conditions())
 
 	rows = frappe.db.sql(
 		f"""

@@ -79,7 +79,12 @@ def assign_lead(
 					reason="Fresh lead limit reached for owner",
 					metadata_snapshot=snapshot_json(row),
 				)
-				return {"status": "skipped", "reason": "fresh_lead_limit_reached", "owner": new_owner}
+				return {
+					"status": "skipped",
+					"reason": "fresh_lead_limit_reached",
+					"owner": new_owner,
+					"retryable": True,
+				}
 			result = _assign_lead_unchecked(
 				lead,
 				new_owner,
@@ -267,6 +272,7 @@ def auto_assign_lead(lead: str, *, event_type: str = "Manual", queue: str | None
 					event_type,
 					queue,
 					row=row,
+					retryable=True,
 				)
 			return assign_lead(
 				lead,
@@ -331,6 +337,7 @@ def _assign_by_rule(
 				queue,
 				row=row,
 				rule=rule,
+				retryable=True,
 			)
 		fallback = rule.fallback_user or settings.fallback_user
 		if fallback:
@@ -342,6 +349,7 @@ def _assign_by_rule(
 					queue,
 					row=row,
 					rule=rule,
+					retryable=True,
 				)
 			return assign_lead(
 				lead,
@@ -356,7 +364,15 @@ def _assign_by_rule(
 				triggered_by=event_type,
 				ignore_permissions=True,
 			)
-		return _skip(lead, f"No eligible agent for rule {rule.name}", event_type, queue, row=row, rule=rule)
+		return _skip(
+			lead,
+			f"No eligible agent for rule {rule.name}",
+			event_type,
+			queue,
+			row=row,
+			rule=rule,
+			retryable=True,
+		)
 
 	return assign_lead(
 		lead,
@@ -456,6 +472,7 @@ def _skip(
 	*,
 	row: dict | None = None,
 	rule: frappe._dict | None = None,
+	retryable: bool = False,
 ) -> dict:
 	row = row or get_lead_context(lead)
 	log_assignment(
@@ -469,4 +486,4 @@ def _skip(
 		reason=reason,
 		metadata_snapshot=snapshot_json(row),
 	)
-	return {"status": "skipped", "reason": reason}
+	return {"status": "skipped", "reason": reason, "retryable": retryable}
