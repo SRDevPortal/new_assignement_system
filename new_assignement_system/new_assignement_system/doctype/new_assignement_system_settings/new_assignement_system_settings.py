@@ -32,6 +32,14 @@ class NewAssignementSystemSettings(Document):
 			self.auto_unassign_on_update = 0
 		if self.enable_status_based_assignment is None:
 			self.enable_status_based_assignment = 0
+		if not self.get("dedupe_required_stage"):
+			self.dedupe_required_stage = "Completed"
+		if not self.get("dedupe_allowed_results"):
+			self.dedupe_allowed_results = "Primary"
+		if not self.get("dedupe_missing_field_behavior"):
+			self.dedupe_missing_field_behavior = "Proceed"
+		if not self.get("assignment_readiness_retry_seconds"):
+			self.assignment_readiness_retry_seconds = 60
 		self.validate_status_assignment_users()
 
 	def validate_status_assignment_users(self) -> None:

@@ -38,6 +38,12 @@ OPTIONAL_FIELDS = (
 	"sr_is_duplicate",
 	"sr_duplicate_of_name",
 	"sr_duplicate_of",
+	"sr_dedupe_status",
+	"sr_dedupe_stage",
+	"sr_dedupe_result",
+	"sr_dedupe_not_before",
+	"sr_assignment_stage",
+	"sr_assignment_next_attempt_at",
 	"mobile_no",
 )
 

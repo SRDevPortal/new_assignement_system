@@ -4,7 +4,10 @@ import frappe
 from frappe.utils import add_to_date, cint, now_datetime
 
 from new_assignement_system.engine.queue import due_queue_names, enqueue_queue_item, mark_retry, try_lock
+from new_assignement_system.engine.context import get_lead_context
+from new_assignement_system.engine.lead_state import set_assignment_state
 from new_assignement_system.engine.service import auto_assign_lead, auto_unassign_lead
+from new_assignement_system.integrations.dedupe import evaluate_assignment_readiness
 from new_assignement_system.settings import (
 	FRESH_SLOT_REFILL_TRIGGER_SCHEDULER,
 	FRESH_SLOT_REFILL_TRIGGER_STATUS_CHANGE,
@@ -19,8 +22,18 @@ def process_assignment_queue_item(queue_name: str) -> dict | None:
 	row = try_lock(queue_name)
 	if not row:
 		return None
+	if not frappe.db.exists("CRM Lead", row.lead):
+		frappe.db.set_value(
+			"New Assignement System Queue",
+			queue_name,
+			{"status": "Cancelled", "error": "CRM Lead no longer exists", "locked_by": None, "locked_at": None},
+			update_modified=True,
+		)
+		frappe.db.commit()
+		return {"status": "cancelled", "reason": "lead_missing"}
 
 	try:
+		set_assignment_state(row.lead, "Processing", reason=f"Processing {row.event_type}", increment_attempts=True)
 		if row.event_type == "Unassign":
 			result = auto_unassign_lead(row.lead, event_type=row.event_type, queue=queue_name)
 			status = "Cancelled" if result.get("status") == "ok" else "Skipped"
@@ -65,6 +78,106 @@ def process_due_short_queue(limit: int | None = None) -> None:
 	settings = get_settings()
 	for queue_name in due_queue_names(limit):
 		enqueue_queue_item(queue_name, queue=settings.default_queue)
+
+
+def release_assignment_waiting_leads(limit: int | None = None) -> int:
+	"""Independently release leads whose configured readiness fields now allow assignment."""
+	settings = get_settings()
+	if not settings.enabled or not frappe.db.has_column("CRM Lead", "sr_assignment_stage"):
+		return 0
+
+	limit = int(limit or settings.queue_batch_size or 100)
+	_reconcile_assigned_duplicates(limit)
+	_reconcile_owned_primary_states(limit)
+	rows = frappe.db.sql(
+		"""
+		select name
+		from `tabCRM Lead`
+		where ifnull(lead_owner, '') = ''
+		  and sr_assignment_stage in ('Waiting for Dedupe', 'Waiting for Agent', 'Capacity Hold')
+		  and (sr_assignment_next_attempt_at is null or sr_assignment_next_attempt_at <= %(now)s)
+		order by coalesce(sr_assignment_next_attempt_at, creation) asc
+		limit %(limit)s
+		""",
+		{"now": now_datetime(), "limit": limit},
+		as_dict=True,
+	)
+	released = 0
+	for item in rows:
+		if not frappe.db.exists("CRM Lead", item.name):
+			continue
+		row = get_lead_context(item.name)
+		allowed, terminal, reason = evaluate_assignment_readiness(row, settings)
+		if not allowed:
+			set_assignment_state(
+				item.name,
+				"Skipped Duplicate" if terminal else "Waiting for Dedupe",
+				reason=reason,
+				retry_seconds=None if terminal else int(settings.assignment_readiness_retry_seconds or 60),
+			)
+			continue
+
+		set_assignment_state(item.name, "Ready", reason="Assignment prerequisites are ready")
+		if cint(settings.queue_enabled):
+			from new_assignement_system.engine.queue import enqueue_lead
+
+			if enqueue_lead(item.name, event_type="Insert", process_now=True):
+				released += 1
+		else:
+			auto_assign_lead(item.name, event_type="Insert")
+			released += 1
+	return released
+
+
+def _reconcile_assigned_duplicates(limit: int) -> int:
+	if not frappe.db.has_column("CRM Lead", "sr_dedupe_result"):
+		return 0
+	rows = frappe.db.sql(
+		"""
+		select name
+		from `tabCRM Lead`
+		where ifnull(lead_owner, '') != ''
+		  and (
+			ifnull(sr_dedupe_result, '') = 'Duplicate'
+			or ifnull(sr_is_duplicate, 0) = 1
+			or ifnull(sr_is_archived, 0) = 1
+		  )
+		  and ifnull(sr_assignment_stage, '') != 'Review Required'
+		order by modified asc
+		limit %(limit)s
+		""",
+		{"limit": limit},
+		as_dict=True,
+	)
+	for row in rows:
+		set_assignment_state(
+			row.name,
+			"Review Required",
+			reason="Assigned lead was later classified as a duplicate; ownership was preserved",
+		)
+	return len(rows)
+
+
+def _reconcile_owned_primary_states(limit: int) -> int:
+	if not frappe.db.has_column("CRM Lead", "sr_dedupe_result"):
+		return 0
+	rows = frappe.db.sql(
+		"""
+		select name
+		from `tabCRM Lead`
+		where ifnull(lead_owner, '') != ''
+		  and sr_dedupe_stage = 'Completed'
+		  and sr_dedupe_result = 'Primary'
+		  and sr_assignment_stage in ('Waiting for Dedupe', 'Ready', 'Queued', 'Failed')
+		order by modified asc
+		limit %(limit)s
+		""",
+		{"limit": limit},
+		as_dict=True,
+	)
+	for row in rows:
+		set_assignment_state(row.name, "Assigned", reason="Existing owner retained after dedupe")
+	return len(rows)
 
 
 def retry_failed_queue() -> None:

@@ -8,6 +8,7 @@ from frappe.utils import cint
 
 from new_assignement_system.engine.audit import log_assignment
 from new_assignement_system.engine.context import get_lead_context, snapshot_json
+from new_assignement_system.engine.lead_state import set_assignment_state
 from new_assignement_system.engine.counters import decrement_agent, increment_agent
 from new_assignement_system.engine.eligibility import (
 	agent_has_fresh_lead_capacity,
@@ -20,7 +21,7 @@ from new_assignement_system.engine.eligibility import (
 from new_assignement_system.engine.rules import match_rule, match_unassign_rule
 from new_assignement_system.engine.strategies import select_agent
 from new_assignement_system.engine.sync import clear_assignment_helpers, sync_assignment_helpers
-from new_assignement_system.integrations.dedupe import should_skip_lead
+from new_assignement_system.integrations.dedupe import evaluate_assignment_readiness
 from new_assignement_system.integrations.team import get_team_for_user, has_team_field
 from new_assignement_system.settings import get_settings
 
@@ -47,6 +48,9 @@ def assign_lead(
 	settings = get_settings()
 	row = get_lead_context(lead, for_update=True)
 	old_owner = row.get("lead_owner")
+	allowed, _terminal, readiness_reason = evaluate_assignment_readiness(row, settings)
+	if not allowed:
+		return _skip(lead, readiness_reason, triggered_by or "Direct", queue, row=row, rule=frappe._dict(name=rule))
 
 	if (
 		old_owner != new_owner
@@ -78,6 +82,12 @@ def assign_lead(
 					triggered_by=triggered_by,
 					reason="Fresh lead limit reached for owner",
 					metadata_snapshot=snapshot_json(row),
+				)
+				set_assignment_state(
+					lead,
+					"Capacity Hold",
+					reason="Fresh lead limit reached for owner",
+					retry_seconds=int(settings.assignment_readiness_retry_seconds or 60),
 				)
 				return {"status": "skipped", "reason": "fresh_lead_limit_reached", "owner": new_owner}
 			result = _assign_lead_unchecked(
@@ -115,6 +125,7 @@ def assign_lead(
 			reason=reason or "Lead already assigned to this owner",
 			metadata_snapshot=snapshot_json(row),
 		)
+		set_assignment_state(lead, "Assigned", reason=reason or "Lead already assigned", rule=rule)
 		return {"status": "skipped", "reason": "already_assigned", "owner": new_owner}
 
 	return _assign_lead_unchecked(
@@ -177,6 +188,12 @@ def _assign_lead_unchecked(
 		reason=reason,
 		metadata_snapshot=snapshot_json(row),
 	)
+	set_assignment_state(
+		lead,
+		"Assigned",
+		reason=reason or action,
+		rule=rule,
+	)
 	return {"status": "ok", "action": action, "old_owner": old_owner, "new_owner": new_owner}
 
 
@@ -210,6 +227,7 @@ def clear_lead_assignment(
 		reason=reason,
 		metadata_snapshot=snapshot_json(row),
 	)
+	set_assignment_state(lead, "Cancelled", reason=reason or "Assignment cleared")
 	return {"status": "ok", "action": "Unassigned", "old_owner": old_owner}
 
 
@@ -253,9 +271,10 @@ def auto_assign_lead(lead: str, *, event_type: str = "Manual", queue: str | None
 		return _skip(lead, "Assignment app disabled", event_type, queue)
 
 	row = get_lead_context(lead, for_update=True)
-	skip, reason = should_skip_lead(row)
-	if skip:
+	allowed, _terminal, reason = evaluate_assignment_readiness(row, settings)
+	if not allowed:
 		return _skip(lead, reason, event_type, queue, row=row)
+	set_assignment_state(lead, "Processing", reason=f"Evaluating {event_type} assignment", increment_attempts=True)
 
 	rule = match_rule(row, event_type=event_type)
 	if not rule:
@@ -283,8 +302,8 @@ def auto_assign_lead(lead: str, *, event_type: str = "Manual", queue: str | None
 	if strategy == "Round Robin":
 		with _round_robin_lock(rule.name):
 			row = get_lead_context(lead, for_update=True)
-			skip, reason = should_skip_lead(row)
-			if skip:
+			allowed, _terminal, reason = evaluate_assignment_readiness(row, settings)
+			if not allowed:
 				return _skip(lead, reason, event_type, queue, row=row, rule=rule)
 			result = _assign_by_rule(lead, row, rule, strategy, event_type, queue, settings)
 			frappe.db.commit()
@@ -424,8 +443,8 @@ def can_auto_assign_lead(lead: str, *, event_type: str = "Manual") -> bool:
 		return False
 
 	row = get_lead_context(lead)
-	skip, _reason = should_skip_lead(row)
-	if skip:
+	allowed, _terminal, _reason = evaluate_assignment_readiness(row, settings)
+	if not allowed:
 		return False
 
 	return bool(match_rule(row, event_type=event_type) or settings.fallback_user)
@@ -468,5 +487,30 @@ def _skip(
 		triggered_by=event_type,
 		reason=reason,
 		metadata_snapshot=snapshot_json(row),
+	)
+	reason_text = str(reason or "")
+	if "duplicate" in reason_text.lower() or "archived" in reason_text.lower():
+		stage = "Skipped Duplicate"
+	elif "dedupe" in reason_text.lower() or "metadata" in reason_text.lower():
+		stage = "Waiting for Dedupe"
+	elif "fresh lead limit" in reason_text.lower() or "capacity" in reason_text.lower():
+		stage = "Capacity Hold"
+	elif "no assignment rule" in reason_text.lower() or "no rule matched" in reason_text.lower():
+		stage = "No Matching Rule"
+	elif "no eligible agent" in reason_text.lower() or "no available online agent" in reason_text.lower():
+		stage = "Waiting for Agent"
+	else:
+		stage = "Failed"
+	settings = get_settings()
+	retry = None
+	if stage in {"Waiting for Dedupe", "Waiting for Agent", "Capacity Hold"}:
+		retry = int(settings.assignment_readiness_retry_seconds or 60)
+	set_assignment_state(
+		lead,
+		stage,
+		reason=reason,
+		rule=(rule or {}).get("name"),
+		increment_attempts=True,
+		retry_seconds=retry,
 	)
 	return {"status": "skipped", "reason": reason}

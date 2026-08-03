@@ -5,6 +5,7 @@ from frappe.utils import cint
 
 from new_assignement_system.engine.eligibility import would_exceed_fresh_lead_limit
 from new_assignement_system.engine.queue import enqueue_lead
+from new_assignement_system.engine.lead_state import set_assignment_state
 from new_assignement_system.engine.rules import match_rule
 from new_assignement_system.engine.service import (
 	assign_lead,
@@ -13,7 +14,7 @@ from new_assignement_system.engine.service import (
 	can_auto_unassign_lead,
 )
 from new_assignement_system.engine.sync import sync_assignment_helpers
-from new_assignement_system.integrations.dedupe import should_skip_lead
+from new_assignement_system.integrations.dedupe import evaluate_assignment_readiness, should_skip_lead
 from new_assignement_system.settings import (
 	FRESH_SLOT_REFILL_TRIGGER_STATUS_CHANGE,
 	get_settings,
@@ -64,10 +65,26 @@ def after_insert(doc, method: str | None = None) -> None:
 		return
 
 	if doc.get("lead_owner"):
+		allowed, _terminal, reason = evaluate_assignment_readiness(frappe._dict(doc.as_dict()), settings)
+		set_assignment_state(
+			doc.name,
+			"Review Required" if not allowed else "Assigned",
+			reason=reason or "Lead already had an owner at insert",
+		)
 		sync_assignment_helpers(doc.name, doc.get("lead_owner"))
 		return
 
 	if settings.auto_assign_on_insert:
+		allowed, terminal, reason = evaluate_assignment_readiness(frappe._dict(doc.as_dict()), settings)
+		if not allowed:
+			set_assignment_state(
+				doc.name,
+				"Skipped Duplicate" if terminal else "Waiting for Dedupe",
+				reason=reason,
+				retry_seconds=int(settings.assignment_readiness_retry_seconds or 60) if not terminal else None,
+			)
+			return
+		set_assignment_state(doc.name, "Ready", reason="Assignment prerequisites are ready")
 		if cint(settings.inline_assign_on_insert) or not cint(settings.queue_enabled):
 			frappe.db.after_commit.add(lambda lead=doc.name: _assign_insert_inline_or_queue(lead))
 			return

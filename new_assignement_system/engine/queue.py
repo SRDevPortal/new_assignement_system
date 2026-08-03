@@ -4,6 +4,7 @@ import frappe
 from frappe.utils import add_to_date, now_datetime
 
 from new_assignement_system.engine.context import get_lead_context, snapshot_hash, snapshot_json
+from new_assignement_system.engine.lead_state import set_assignment_state
 from new_assignement_system.settings import get_settings
 
 QUEUE_DOCTYPE = "New Assignement System Queue"
@@ -18,6 +19,8 @@ def enqueue_lead(
 	process_now: bool = True,
 ) -> str | None:
 	if not frappe.db.exists("DocType", QUEUE_DOCTYPE):
+		return None
+	if not frappe.db.exists("CRM Lead", lead):
 		return None
 
 	existing = frappe.db.get_value(
@@ -47,6 +50,7 @@ def enqueue_lead(
 		}
 	)
 	doc.insert(ignore_permissions=True)
+	set_assignment_state(lead, "Queued", reason=f"Queued for {event_type} assignment")
 
 	if process_now and get_settings().queue_enabled:
 		enqueue_queue_item(doc.name)
@@ -117,4 +121,3 @@ def try_lock(queue_name: str) -> frappe._dict | None:
 	)
 	row.attempts = int(row.attempts or 0) + 1
 	return frappe._dict(row)
-
