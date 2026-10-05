@@ -60,15 +60,23 @@ def assign_crm_leads(leads, new_owner: str) -> dict:
 		)
 		return {"status": "queued", "count": len(names)}
 
+	results = []
 	for lead in names:
-		assign_lead(
+		results.append(assign_lead(
 			lead,
 			new_owner,
 			reason="Manual assignment",
 			triggered_by=frappe.session.user,
 			ignore_permissions=True,
-		)
-	return {"status": "ok", "count": len(names)}
+		))
+	assigned = sum(1 for result in results if result.get("status") == "ok")
+	return {
+		"status": "ok" if assigned == len(names) else "partial" if assigned else "skipped",
+		"count": len(names),
+		"assigned": assigned,
+		"skipped": len(names) - assigned,
+		"results": results,
+	}
 
 
 @frappe.whitelist()
@@ -105,4 +113,3 @@ def reassign_crm_leads(leads, new_owner: str) -> dict:
 # Backward-compatible names for existing callers.
 assign_crm_lead_owner = assign_crm_leads
 clear_crm_lead_owner = clear_crm_leads
-

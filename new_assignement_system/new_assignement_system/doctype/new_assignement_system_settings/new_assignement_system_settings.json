@@ -14,6 +14,12 @@
                         "auto_assign_on_insert",
                         "inline_assign_on_insert",
                         "override_api_owner_when_rule_matches",
+                        "dedupe_readiness_section",
+                        "enable_dedupe_readiness_check",
+                        "dedupe_required_stage",
+                        "dedupe_allowed_results",
+                        "dedupe_missing_field_behavior",
+                        "assignment_readiness_retry_seconds",
                         "enable_total_capacity_limit",
                         "enable_fresh_lead_limit",
                         "enable_fresh_slot_auto_refill",
@@ -87,6 +93,50 @@
                        "fieldname":  "override_api_owner_when_rule_matches",
                        "fieldtype":  "Check",
                        "label":  "Replace API Lead Owner When Rule Matches"
+                   },
+                   {
+                       "fieldname": "dedupe_readiness_section",
+                       "fieldtype": "Section Break",
+                       "label": "Dedupe Readiness"
+                   },
+                   {
+                       "default": "1",
+                       "description": "Hold automatic assignment until the configured read-only CRM Lead dedupe fields are ready. This uses fields only and does not call the dedupe app.",
+                       "fieldname": "enable_dedupe_readiness_check",
+                       "fieldtype": "Check",
+                       "label": "Enable Dedupe Readiness Check"
+                   },
+                   {
+                       "default": "Completed",
+                       "depends_on": "eval:doc.enable_dedupe_readiness_check",
+                       "description": "Pending permits assignment before dedupe finishes. Completed is the recommended safe value.",
+                       "fieldname": "dedupe_required_stage",
+                       "fieldtype": "Select",
+                       "label": "Start Assignment At Dedupe Stage",
+                       "options": "Pending\nProcessing\nCompleted"
+                   },
+                   {
+                       "default": "Primary",
+                       "depends_on": "eval:doc.enable_dedupe_readiness_check",
+                       "description": "One completed dedupe result per line. Primary is the safe default; add Skipped only when that policy is intentional. Duplicate is always blocked.",
+                       "fieldname": "dedupe_allowed_results",
+                       "fieldtype": "Small Text",
+                       "label": "Allowed Completed Dedupe Results"
+                   },
+                   {
+                       "default": "Proceed",
+                       "depends_on": "eval:doc.enable_dedupe_readiness_check",
+                       "fieldname": "dedupe_missing_field_behavior",
+                       "fieldtype": "Select",
+                       "label": "When Dedupe Fields Are Missing",
+                       "options": "Hold\nProceed"
+                   },
+                   {
+                       "default": "60",
+                       "depends_on": "eval:doc.enable_dedupe_readiness_check",
+                       "fieldname": "assignment_readiness_retry_seconds",
+                       "fieldtype": "Int",
+                       "label": "Readiness Retry Seconds"
                    },
                    {
                        "default":  "1",

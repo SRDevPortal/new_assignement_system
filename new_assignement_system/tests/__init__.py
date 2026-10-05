@@ -1,1 +1,1 @@
-"""Tests for New Assignement System."""
+"""Tests for the assignment application."""

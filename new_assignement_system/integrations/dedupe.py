@@ -1,54 +1,9 @@
 from __future__ import annotations
 
+import re
+
 import frappe
 from frappe.utils import cint
-
-
-DEDUPE_READY_STATUSES = {"Master", "Completed", "Skipped"}
-DEDUPE_BLOCKED_STATUSES = {"Pending", "Processing", "Failed"}
-
-
-def _has_lead_column(fieldname: str) -> bool:
-	try:
-		return bool(frappe.db.has_column("CRM Lead", fieldname))
-	except Exception:
-		return False
-
-
-def is_dedupe_ready(row: dict) -> bool:
-	"""Return whether a lead is safe for assignment after dedupe."""
-	if _has_lead_column("sr_dedupe_pending") and cint(row.get("sr_dedupe_pending")):
-		return False
-
-	if not _has_lead_column("sr_dedupe_status"):
-		return True
-
-	status = str(row.get("sr_dedupe_status") or "").strip()
-	if status in DEDUPE_BLOCKED_STATUSES:
-		return False
-	if status in DEDUPE_READY_STATUSES:
-		return True
-
-	# A normalized mobile with no result has not been scanned yet. Leads without
-	# a dedupe key remain assignable for backward compatibility.
-	if _has_lead_column("sr_mobile_norm") and row.get("sr_mobile_norm"):
-		return False
-	return True
-
-
-def dedupe_ready_sql_conditions(table_alias: str | None = None) -> list[str]:
-	"""Index-friendly SQL predicates shared by Fresh FIFO/count queries."""
-	prefix = f"`{table_alias}`." if table_alias else ""
-	conditions = []
-	if _has_lead_column("sr_is_archived"):
-		conditions.append(f"{prefix}sr_is_archived = 0")
-	if _has_lead_column("sr_is_duplicate"):
-		conditions.append(f"{prefix}sr_is_duplicate = 0")
-	if _has_lead_column("sr_dedupe_pending"):
-		conditions.append(f"{prefix}sr_dedupe_pending = 0")
-	if _has_lead_column("sr_dedupe_status"):
-		conditions.append(f"{prefix}sr_dedupe_status in ('Master', 'Completed', 'Skipped')")
-	return conditions
 
 
 def should_skip_lead(row: dict) -> tuple[bool, str | None]:
@@ -60,73 +15,73 @@ def should_skip_lead(row: dict) -> tuple[bool, str | None]:
 		return True, "Lead is marked duplicate"
 	if row.get("sr_duplicate_of_name") or row.get("sr_duplicate_of"):
 		return True, "Lead points to a duplicate primary"
-	if not is_dedupe_ready(row):
-		return True, "Lead is waiting for dedupe"
+	if str(row.get("sr_dedupe_result") or "").strip() == "Duplicate":
+		return True, "Dedupe result is Duplicate"
 	return False, None
 
 
-def reconcile_after_dedupe(
-	canonical_lead: str,
-	merged_leads: list[str] | None = None,
-	affected_agents: list[str] | None = None,
-) -> dict:
-	"""Reconcile assignment helpers/slots after merge-to-new commits."""
-	from new_assignement_system.engine.context import get_lead_context
-	from new_assignement_system.engine.counters import reconcile_agent_open_lead_count
-	from new_assignement_system.engine.eligibility import is_fresh_lead
-	from new_assignement_system.engine.queue import enqueue_lead
-	from new_assignement_system.engine.sync import sync_assignment_helpers
-	from new_assignement_system.jobs import enqueue_fresh_refill_for_agent
-	from new_assignement_system.settings import get_settings
+def allowed_results(value) -> set[str]:
+	if isinstance(value, str):
+		values = re.split(r"[\n,]+", value)
+	elif isinstance(value, (list, tuple, set)):
+		values = value
+	else:
+		values = []
+	return {str(item).strip() for item in values if str(item).strip() and str(item).strip() != "Duplicate"}
 
-	if not canonical_lead or not frappe.db.exists("CRM Lead", canonical_lead):
-		return {"status": "skipped", "reason": "canonical_lead_missing"}
 
-	row = get_lead_context(
-		canonical_lead,
-		extra=["sr_dedupe_pending", "sr_dedupe_status", "sr_mobile_norm"],
-	)
-	owner = row.get("lead_owner")
-	agents = {agent for agent in (affected_agents or []) if agent}
-	if owner:
-		agents.add(owner)
-
+def evaluate_assignment_readiness(row: dict, settings) -> tuple[bool, bool, str | None]:
+	"""Return allowed, terminal, reason using CRM Lead fields only."""
 	skip, reason = should_skip_lead(row)
 	if skip:
-		for agent in agents:
-			reconcile_agent_open_lead_count(agent)
-		frappe.db.commit()
-		return {
-			"status": "skipped",
-			"reason": reason,
-			"affected_agents": sorted(agents),
-		}
+		return False, True, reason
+	if not cint(settings.get("enable_dedupe_readiness_check")):
+		return True, False, None
 
-	if owner:
-		sync_assignment_helpers(canonical_lead, owner, description="Lead Owner preserved after dedupe")
+	if not _has_field("sr_dedupe_stage"):
+		if str(settings.get("dedupe_missing_field_behavior") or "Hold") == "Proceed":
+			return True, False, None
+		return False, False, "Dedupe readiness field is not installed"
 
-	for agent in agents:
-		reconcile_agent_open_lead_count(agent)
+	stage = str(row.get("sr_dedupe_stage") or "").strip()
+	result = str(row.get("sr_dedupe_result") or "").strip()
+	if not stage:
+		stage, result = _legacy_state(row.get("sr_dedupe_status"))
 
-	queued = None
-	settings = get_settings()
-	if settings.enabled and is_fresh_lead(row, settings=settings) and not owner:
-		queued = enqueue_lead(
-			canonical_lead,
-			event_type="Fresh FIFO",
-			priority=20,
-			process_now=False,
-		)
+	if stage == "Failed":
+		return False, False, "Dedupe failed"
+	if stage == "Waiting for Metadata":
+		return False, False, "Waiting for dedupe metadata"
 
-	for agent in agents:
-		enqueue_fresh_refill_for_agent(agent)
+	required = str(settings.get("dedupe_required_stage") or "Completed").strip()
+	ranks = {"Pending": 1, "Processing": 2, "Completed": 3}
+	if ranks.get(stage, 0) < ranks.get(required, 3):
+		return False, False, f"Waiting for dedupe stage {required}"
 
-	frappe.db.commit()
+	if stage == "Completed":
+		if result == "Duplicate":
+			return False, True, "Dedupe result is Duplicate"
+		allowed = allowed_results(settings.get("dedupe_allowed_results"))
+		if result not in allowed:
+			return False, False, f"Dedupe result {result or 'blank'} is not allowed"
+
+	return True, False, None
+
+
+def _has_field(fieldname: str) -> bool:
+	try:
+		return bool(frappe.db.has_column("CRM Lead", fieldname))
+	except Exception:
+		return False
+
+
+def _legacy_state(status) -> tuple[str, str]:
+	status = str(status or "").strip()
 	return {
-		"status": "ok",
-		"canonical_lead": canonical_lead,
-		"merged_leads": merged_leads or [],
-		"owner": owner,
-		"queued": queued,
-		"affected_agents": sorted(agents),
-	}
+		"Pending": ("Pending", ""),
+		"Processing": ("Processing", ""),
+		"Master": ("Completed", "Primary"),
+		"Duplicate": ("Completed", "Duplicate"),
+		"Skipped": ("Completed", "Skipped"),
+		"Failed": ("Failed", ""),
+	}.get(status, ("", ""))

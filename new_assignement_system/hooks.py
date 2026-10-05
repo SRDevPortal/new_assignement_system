@@ -36,6 +36,7 @@ doc_events = {
 scheduler_events = {
 	"cron": {
 		"* * * * *": [
+			"new_assignement_system.jobs.release_assignment_waiting_leads",
 			"new_assignement_system.jobs.process_due_short_queue",
 			"new_assignement_system.jobs.sync_agent_login_status",
 			"new_assignement_system.jobs.enqueue_unassigned_fresh_leads",

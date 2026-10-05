@@ -9,7 +9,9 @@ def after_install() -> None:
 
 def after_migrate() -> None:
 	from new_assignement_system.patches.v1_0.ensure_indexes import execute
+	from new_assignement_system.setup.lead_fields import apply
 
+	apply()
 	execute()
 
 	if frappe.db.exists("DocType", "New Assignement System Settings"):

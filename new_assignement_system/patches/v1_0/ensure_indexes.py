@@ -30,6 +30,11 @@ def ensure_crm_lead_indexes() -> None:
 	_add_index("CRM Lead", ["sr_lead_pipeline", "status", "converted"], "idx_crmlead_assignment_pipeline_status")
 	_add_index("CRM Lead", ["source", "status", "converted"], "idx_crmlead_assignment_source_status")
 	_add_index("CRM Lead", ["modified"], "idx_crmlead_assignment_modified")
+	_add_index(
+		"CRM Lead",
+		["sr_assignment_stage", "sr_assignment_next_attempt_at"],
+		"idx_crmlead_assignment_stage_retry",
+	)
 
 
 def ensure_todo_indexes() -> None:
