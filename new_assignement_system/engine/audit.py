@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import frappe
 
+from new_assignement_system.number_privacy import sanitize_for_storage
+
 
 def log_assignment(
 	*,
@@ -35,9 +37,9 @@ def log_assignment(
 			"strategy": strategy,
 			"queue": queue,
 			"triggered_by": triggered_by or frappe.session.user,
-			"reason": reason,
+			"reason": sanitize_for_storage(reason),
 			"metadata_snapshot": metadata_snapshot,
-			"error": error,
+			"error": sanitize_for_storage(error),
 		}
 	)
 	doc.insert(ignore_permissions=True)

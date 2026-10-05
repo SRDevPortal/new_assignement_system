@@ -3,6 +3,8 @@ from __future__ import annotations
 import frappe
 from frappe.utils import add_to_date, now_datetime
 
+from new_assignement_system.number_privacy import sanitize_for_storage
+
 
 def set_assignment_state(
 	lead: str,
@@ -20,8 +22,8 @@ def set_assignment_state(
 	now = now_datetime()
 	values = {
 		"sr_assignment_stage": stage,
-		"sr_assignment_reason": reason,
-		"sr_assignment_error": error,
+		"sr_assignment_reason": sanitize_for_storage(reason),
+		"sr_assignment_error": sanitize_for_storage(error),
 	}
 	if rule is not None:
 		values["sr_assignment_rule"] = rule

@@ -8,6 +8,7 @@ from new_assignement_system.engine.context import get_lead_context
 from new_assignement_system.engine.lead_state import set_assignment_state
 from new_assignement_system.engine.service import auto_assign_lead, auto_unassign_lead
 from new_assignement_system.integrations.dedupe import evaluate_assignment_readiness
+from new_assignement_system.number_privacy import sanitize_for_storage
 from new_assignement_system.settings import (
 	FRESH_SLOT_REFILL_TRIGGER_SCHEDULER,
 	FRESH_SLOT_REFILL_TRIGGER_STATUS_CHANGE,
@@ -51,7 +52,7 @@ def process_assignment_queue_item(queue_name: str) -> dict | None:
 				{
 					"status": "Retry",
 					"next_retry_at": add_to_date(now_datetime(), minutes=1),
-					"error": str(result.get("reason") or "")[:1000],
+					"error": sanitize_for_storage(str(result.get("reason") or ""))[:1000],
 				}
 			)
 		frappe.db.set_value(

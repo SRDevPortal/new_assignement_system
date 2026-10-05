@@ -5,6 +5,7 @@ from frappe.utils import add_to_date, now_datetime
 
 from new_assignement_system.engine.context import get_lead_context, snapshot_hash, snapshot_json
 from new_assignement_system.engine.lead_state import set_assignment_state
+from new_assignement_system.number_privacy import sanitize_for_storage
 from new_assignement_system.settings import get_settings
 
 QUEUE_DOCTYPE = "New Assignement System Queue"
@@ -89,7 +90,7 @@ def mark_retry(queue_name: str, error: str, attempts: int) -> None:
 		queue_name,
 		{
 			"status": status,
-			"error": error[:1000],
+			"error": sanitize_for_storage(error)[:1000],
 			"next_retry_at": next_retry_at,
 			"locked_by": None,
 			"locked_at": None,

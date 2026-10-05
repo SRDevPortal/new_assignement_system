@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import frappe
+
+from new_assignement_system.number_privacy import mask_text
 from frappe.utils import cint
 
 from new_assignement_system.engine.eligibility import would_exceed_fresh_lead_limit
@@ -176,7 +178,7 @@ def _assign_by_status_change(doc) -> bool:
 			ignore_permissions=True,
 		)
 	except Exception:
-		frappe.log_error(frappe.get_traceback(), "New Assignement System Status Assignment Failed")
+		frappe.log_error(mask_text(frappe.get_traceback()), "New Assignement System Status Assignment Failed")
 		raise
 	return True
 
@@ -204,7 +206,7 @@ def _enqueue_fresh_refill_for_agent(agent: str | None = None) -> None:
 		if agent:
 			enqueue_fresh_refill_for_agent(agent)
 	except Exception:
-		frappe.log_error(frappe.get_traceback(), "New Assignement System Fresh FIFO Failed")
+		frappe.log_error(mask_text(frappe.get_traceback()), "New Assignement System Fresh FIFO Failed")
 
 
 def _should_override_api_owner(doc, settings) -> bool:
@@ -227,7 +229,7 @@ def _assign_insert_inline_or_queue(lead: str) -> None:
 		auto_assign_lead(lead, event_type="Insert")
 		frappe.db.commit()
 	except Exception:
-		frappe.log_error(frappe.get_traceback(), "Inline New Assignement System Failed")
+		frappe.log_error(mask_text(frappe.get_traceback()), "Inline New Assignement System Failed")
 		enqueue_lead(lead, event_type="Insert", process_now=True)
 		frappe.db.commit()
 
@@ -251,6 +253,6 @@ def _process_update_inline(lead: str, event_type: str) -> None:
 			auto_assign_lead(lead, event_type=event_type)
 		frappe.db.commit()
 	except Exception:
-		frappe.log_error(frappe.get_traceback(), "Inline New Assignement System Update Failed")
+		frappe.log_error(mask_text(frappe.get_traceback()), "Inline New Assignement System Update Failed")
 		enqueue_lead(lead, event_type=event_type, process_now=True)
 		frappe.db.commit()

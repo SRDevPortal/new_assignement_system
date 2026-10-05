@@ -9,10 +9,12 @@ from new_assignement_system.integrations.role_permissions import (
 	is_effective_team_leader,
 	is_privileged,
 )
+from new_assignement_system.number_privacy import browser_response
 from new_assignement_system.settings import get_settings
 
 
 @frappe.whitelist()
+@browser_response
 def get_new_assignement_system_context() -> dict:
 	user = frappe.session.user
 	settings = get_settings()
