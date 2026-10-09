@@ -302,7 +302,7 @@
                        "label":  "Enable Background Queue Processing"
                    },
                    {
-                       "default":  "lead_assignment_short",
+                       "default":  "short",
                        "fieldname":  "default_queue",
                        "fieldtype":  "Data",
                        "label":  "Default Queue Name"

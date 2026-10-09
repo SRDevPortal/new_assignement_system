@@ -7,7 +7,7 @@ from frappe.model.document import Document
 class NewAssignementSystemSettings(Document):
 	def validate(self) -> None:
 		if not self.default_queue:
-			self.default_queue = "lead_assignment_short"
+			self.default_queue = "short"
 		if not self.bulk_queue:
 			self.bulk_queue = "lead_assignment_bulk"
 		if not self.scheduler_queue:

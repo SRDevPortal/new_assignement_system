@@ -44,7 +44,7 @@ DEFAULT_SETTINGS = {
 	"sync_docshare": 1,
 	"sync_team_from_lead_owner": 1,
 	"notify_manual_assign": 0,
-	"default_queue": "lead_assignment_short",
+	"default_queue": "short",
 	"bulk_queue": "lead_assignment_bulk",
 	"scheduler_queue": "lead_assignment_scheduler",
 	"bulk_inline_limit": 20,
