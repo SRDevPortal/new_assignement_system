@@ -11,6 +11,7 @@
   "priority",
   "rule",
   "attempts",
+  "capacity_waits",
   "next_retry_at",
   "locked_section",
   "locked_by",
@@ -65,6 +66,13 @@
    "fieldname": "attempts",
    "fieldtype": "Int",
    "label": "Attempts"
+  },
+  {
+   "default": "0",
+   "fieldname": "capacity_waits",
+   "fieldtype": "Int",
+   "label": "Capacity Waits",
+   "read_only": 1
   },
   {
    "fieldname": "next_retry_at",

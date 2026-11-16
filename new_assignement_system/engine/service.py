@@ -7,6 +7,7 @@ import frappe
 from frappe.utils import cint
 
 from new_assignement_system.engine.audit import log_assignment
+from new_assignement_system.engine.contention import AssignmentBusy
 from new_assignement_system.engine.context import get_lead_context, snapshot_json
 from new_assignement_system.engine.lead_state import set_assignment_state
 from new_assignement_system.engine.counters import decrement_agent, increment_agent
@@ -395,9 +396,9 @@ def _assign_by_rule(
 @contextmanager
 def _round_robin_lock(rule: str):
 	lock_name = "nas_rr_" + sha1(str(rule).encode("utf-8")).hexdigest()
-	acquired = frappe.db.sql("select get_lock(%s, %s)", (lock_name, 30))[0][0]
+	acquired = frappe.db.sql("select get_lock(%s, %s)", (lock_name, 0))[0][0]
 	if not acquired:
-		frappe.throw(f"Could not acquire Round Robin lock for rule {rule}")
+		raise AssignmentBusy("Assignment is already in progress for this rule. Please retry.")
 	try:
 		yield
 	finally:
@@ -407,9 +408,9 @@ def _round_robin_lock(rule: str):
 @contextmanager
 def _fresh_capacity_lock(agent: str):
 	lock_name = "nas_fresh_" + sha1(str(agent).encode("utf-8")).hexdigest()
-	acquired = frappe.db.sql("select get_lock(%s, %s)", (lock_name, 30))[0][0]
+	acquired = frappe.db.sql("select get_lock(%s, %s)", (lock_name, 0))[0][0]
 	if not acquired:
-		frappe.throw(f"Could not acquire Fresh Lead Capacity lock for {agent}")
+		raise AssignmentBusy("Assignment capacity is being updated. Please retry.")
 	try:
 		yield
 	finally:

@@ -3,7 +3,8 @@ from __future__ import annotations
 import frappe
 from frappe.utils import add_to_date, cint, now_datetime
 
-from new_assignement_system.engine.queue import due_queue_names, enqueue_queue_item, mark_retry, try_lock
+from new_assignement_system.engine.queue import capacity_delay, due_queue_names, enqueue_queue_item, mark_retry, try_lock
+from new_assignement_system.engine.contention import AssignmentBusy
 from new_assignement_system.engine.context import get_lead_context
 from new_assignement_system.engine.lead_state import set_assignment_state
 from new_assignement_system.engine.service import auto_assign_lead, auto_unassign_lead
@@ -19,9 +20,31 @@ from new_assignement_system.settings import (
 FRESH_REFILL_SCAN_MULTIPLIER = 5
 
 
+def enqueue_scheduler_maintenance() -> None:
+	"""Keep recurring scans out of the shared pool when isolation is provisioned."""
+	from frappe.utils.background_jobs import get_queues_timeout
+	settings = get_settings()
+	if not settings.enabled:
+		return
+	known = get_queues_timeout()
+	queue = settings.get("scheduler_queue")
+	if queue not in known:
+		queue = settings.default_queue if settings.default_queue in known else "short"
+	for method in ("release_assignment_waiting_leads", "sync_agent_login_status", "enqueue_unassigned_fresh_leads"):
+		frappe.enqueue("new_assignement_system.jobs." + method, queue=queue,
+			timeout=300, enqueue_after_commit=True,
+			job_id="nas-maintenance-" + method, deduplicate=True)
+
+
 def process_assignment_queue_item(queue_name: str) -> dict | None:
-	row = try_lock(queue_name)
+	try:
+		row = try_lock(queue_name)
+	except frappe.QueryTimeoutError:
+		# NOWAIT contention: the owning job or the due-work scanner handles it.
+		frappe.db.rollback()
+		return None
 	if not row:
+		frappe.db.rollback()
 		return None
 	if not frappe.db.exists("CRM Lead", row.lead):
 		frappe.db.set_value(
@@ -48,13 +71,20 @@ def process_assignment_queue_item(queue_name: str) -> dict | None:
 			"locked_at": None,
 		}
 		if cint(get_settings().enable_fresh_slot_auto_refill) and _should_retry_capacity_skip(result):
+			waits = int(row.get("capacity_waits") or 0) + 1
+			delay = capacity_delay(queue_name, waits)
 			values.update(
 				{
 					"status": "Retry",
-					"next_retry_at": add_to_date(now_datetime(), minutes=1),
+					"next_retry_at": add_to_date(now_datetime(), seconds=delay),
+					"attempts": max(0, row.attempts - 1),
 					"error": sanitize_for_storage(str(result.get("reason") or ""))[:1000],
 				}
 			)
+			if frappe.db.has_column("New Assignement System Queue", "capacity_waits"):
+				values["capacity_waits"] = waits
+			# Keep the independent waiting-lead scanner on the same due time.
+			set_assignment_state(row.lead, "Capacity Hold", reason=result.get("reason"), retry_seconds=delay)
 		frappe.db.set_value(
 			"New Assignement System Queue",
 			queue_name,
@@ -63,8 +93,10 @@ def process_assignment_queue_item(queue_name: str) -> dict | None:
 		)
 		frappe.db.commit()
 		return result
-	except Exception:
-		mark_retry(queue_name, frappe.get_traceback(), row.attempts)
+	except Exception as exc:
+		error = frappe.get_traceback()
+		frappe.db.rollback()
+		mark_retry(queue_name, error, row.attempts, claim=row, busy=isinstance(exc, AssignmentBusy))
 		frappe.db.commit()
 		return None
 
@@ -76,7 +108,11 @@ def _should_retry_capacity_skip(result: dict | None) -> bool:
 
 
 def process_due_short_queue(limit: int | None = None) -> None:
+	from new_assignement_system.engine.queue import recover_abandoned_claims
 	settings = get_settings()
+	if not settings.enabled or not cint(settings.queue_enabled):
+		return
+	recover_abandoned_claims()
 	for queue_name in due_queue_names(limit):
 		enqueue_queue_item(queue_name, queue=settings.default_queue)
 

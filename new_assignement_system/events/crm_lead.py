@@ -229,6 +229,7 @@ def _assign_insert_inline_or_queue(lead: str) -> None:
 		auto_assign_lead(lead, event_type="Insert")
 		frappe.db.commit()
 	except Exception:
+		frappe.db.rollback()
 		frappe.log_error(mask_text(frappe.get_traceback()), "Inline New Assignement System Failed")
 		enqueue_lead(lead, event_type="Insert", process_now=True)
 		frappe.db.commit()
@@ -253,6 +254,7 @@ def _process_update_inline(lead: str, event_type: str) -> None:
 			auto_assign_lead(lead, event_type=event_type)
 		frappe.db.commit()
 	except Exception:
+		frappe.db.rollback()
 		frappe.log_error(mask_text(frappe.get_traceback()), "Inline New Assignement System Update Failed")
 		enqueue_lead(lead, event_type=event_type, process_now=True)
 		frappe.db.commit()

@@ -71,20 +71,24 @@ def _apply_rule_last_assigned(candidates: list[frappe._dict], rule: str | None) 
 	if not agents:
 		return
 
-	rows = frappe.db.sql(
-		"""
-		select new_owner, max(creation) as last_assigned_at
-		from `tabNew Assignement System Log`
-		where rule = %(rule)s
-		  and new_owner in %(agents)s
-		  and action in ('Assigned', 'Reassigned')
-		  and status = 'Success'
-		group by new_owner
-		""",
-		{"rule": rule, "agents": tuple(agents)},
-		as_dict=True,
-	)
-	last_by_agent = {row.new_owner: row.last_assigned_at for row in rows}
+	# One bounded newest-row lookup per action/owner instead of aggregating
+	# the entire history while holding the rule lock. The optional covering
+	# index (rule, new_owner, status, action, creation) makes these index-only.
+	# Do not cache: selection must see the preceding committed assignment.
+	last_by_agent = {}
+	for agent in dict.fromkeys(agents):
+		latest = []
+		for action in ("Assigned", "Reassigned"):
+			rows = frappe.db.sql(
+				"""select creation from `tabNew Assignement System Log`
+				where rule = %(rule)s and new_owner = %(agent)s
+				  and status = 'Success' and action = %(action)s
+				order by creation desc limit 1""",
+				{"rule": rule, "agent": agent, "action": action},
+			)
+			if rows and rows[0][0] is not None:
+				latest.append(rows[0][0])
+		last_by_agent[agent] = max(latest) if latest else None
 	for row in candidates:
 		row.rule_last_assigned_at = last_by_agent.get(row.agent)
 
