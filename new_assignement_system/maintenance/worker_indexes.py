@@ -6,6 +6,8 @@ is a read-only plan. No arbitrary SQL/table/index identifiers are accepted.
 import frappe
 
 TARGETS = {
+    'lead_capacity': ('tabCRM Lead', 'idx_nas_owner_status_converted',
+                      ('lead_owner', 'status', 'converted')),
     'assignment': ('tabNew Assignement System Log', 'idx_nas_rule_owner_status_action_created',
                    ('rule','new_owner','status','action','creation')),
     'chat_report': ('tabChat Message', 'idx_chat_sender_creation_delivery',
@@ -15,7 +17,7 @@ TARGETS = {
 
 def install(target='assignment', apply=False):
     if target not in TARGETS:
-        raise ValueError('target must be assignment or chat_report')
+        raise ValueError('Unknown index target: ' + str(target))
     if not isinstance(apply, bool):
         raise ValueError('apply must be a JSON boolean')
     table, name, columns = TARGETS[target]

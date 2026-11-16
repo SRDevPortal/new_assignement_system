@@ -141,3 +141,29 @@ class WorkerContentionTests(TestCase):
             queue.recover_abandoned_claims()
         self.assertIn("status='Processing' and locked_at <",db.sql.call_args.args[0])
         retry.assert_not_called()
+
+    def test_bulk_retries_only_failed_lead_after_rollback(self):
+        events = []
+        db = MagicMock()
+        db.commit.side_effect = lambda: events.append("commit")
+        db.rollback.side_effect = lambda: events.append("rollback")
+        def assign(lead, *args, **kwargs):
+            events.append(lead)
+            if events.count("B") == 1 and lead == "B":
+                raise frappe.QueryTimeoutError()
+            return {"status": "assigned" if lead == "A" else "skipped"}
+        with patch.object(frappe, "db", db), patch.object(service, "assign_lead", side_effect=assign), \
+             patch.object(jobs.time, "sleep"):
+            result = jobs.bulk_assign(["A", "B"], "agent")
+        self.assertEqual(events, ["A", "commit", "B", "rollback", "B", "commit"])
+        self.assertEqual(result, {"status": "ok", "updated": 1, "skipped": 1})
+
+    def test_bulk_contention_is_bounded_and_never_reported_as_success(self):
+        db = MagicMock()
+        with patch.object(frappe, "db", db), patch.object(service, "assign_lead", side_effect=AssignmentBusy) as assign, \
+             patch.object(jobs.time, "sleep"):
+            with self.assertRaises(AssignmentBusy):
+                jobs.bulk_assign(["A"], "agent")
+        self.assertEqual(assign.call_count, 3)
+        self.assertEqual(db.rollback.call_count, 3)
+        db.commit.assert_not_called()

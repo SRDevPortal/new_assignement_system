@@ -66,7 +66,7 @@ def lead_fields(extra: Iterable[str] | None = None) -> list[str]:
 def get_lead_context(lead: str, *, for_update: bool = False, extra: Iterable[str] | None = None) -> frappe._dict:
 	fields = lead_fields(extra)
 	columns = ", ".join(f"`{field}`" for field in fields)
-	lock = " for update" if for_update else ""
+	lock = " for update nowait" if for_update else ""
 	rows = frappe.db.sql(
 		f"select {columns} from `tabCRM Lead` where name=%s{lock}",
 		lead,

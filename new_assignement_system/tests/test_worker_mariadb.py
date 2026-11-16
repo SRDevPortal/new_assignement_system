@@ -16,7 +16,7 @@ from unittest.mock import patch
 
 import frappe
 import pymysql
-from new_assignement_system.engine import queue, strategies
+from new_assignement_system.engine import eligibility, queue, strategies
 
 
 class Database:
@@ -89,6 +89,7 @@ class MariaDBContentionTests(TestCase):
             action varchar(140), status varchar(140), creation datetime(6),
             INDEX idx_nas_rule_owner_status_action_created (rule,new_owner,status,action,creation)
         ) ENGINE=InnoDB ROW_FORMAT=DYNAMIC''')
+        cls.db.sql('CREATE TABLE `tabCRM Lead` (\n            name varchar(140) PRIMARY KEY, lead_owner varchar(140), status varchar(40),\n            converted int DEFAULT 0,\n            INDEX idx_nas_owner_status_converted (lead_owner,status,converted)\n        ) ENGINE=InnoDB')
         cls.a.commit()
 
     @classmethod
@@ -107,6 +108,7 @@ class MariaDBContentionTests(TestCase):
         self.a.rollback(); self.b.rollback()
         self.db.sql('DELETE FROM `tabNew Assignement System Queue`')
         self.db.sql('DELETE FROM `tabNew Assignement System Log`')
+        self.db.sql("DELETE FROM `tabCRM Lead`")
         self.db.sql("INSERT INTO `tabNew Assignement System Queue` (name,lead,event_type,status) VALUES ('Q','L','Insert','Pending')")
         self.a.commit()
 
@@ -163,3 +165,34 @@ class MariaDBContentionTests(TestCase):
         plan = self.db.sql("EXPLAIN SELECT creation FROM `tabNew Assignement System Log` WHERE rule='R' AND new_owner='A' AND status='Success' AND action='Assigned' ORDER BY creation DESC LIMIT 1",as_dict=True)[0]
         self.assertEqual(plan.key,'idx_nas_rule_owner_status_action_created')
         self.assertIn('Using index',plan.Extra)
+
+    def test_capacity_count_fails_fast_then_reads_latest_committed_capacity(self):
+        self.db.sql("INSERT INTO `tabCRM Lead` VALUES ('L', 'agent', 'New', 0)")
+        self.a.commit()
+        # Establish a stale REPEATABLE READ snapshot before the competing commit.
+        with self.b.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM `tabCRM Lead`")
+        self.db.sql("INSERT INTO `tabCRM Lead` VALUES ('L2', 'agent', 'New', 0)")
+        started = time.monotonic()
+        with patch.object(frappe, "db", Database(self.b)):
+            with self.assertRaises(frappe.QueryTimeoutError):
+                eligibility.get_agent_fresh_lead_count("agent", "New", for_update=True)
+        self.assertLess(time.monotonic() - started, 2)
+        self.b.rollback()
+        self.a.commit()
+        with patch.object(frappe, "db", Database(self.b)):
+            count = eligibility.get_agent_fresh_lead_count("agent", "New", for_update=True)
+        self.assertEqual(count, 2)
+        self.b.rollback()
+
+    def test_capacity_uses_current_read_even_with_older_snapshot(self):
+        self.db.sql("INSERT INTO `tabCRM Lead` VALUES ('L', 'agent', 'New', 0)")
+        self.a.commit()
+        with self.b.cursor() as cursor:
+            cursor.execute("SELECT COUNT(*) FROM `tabCRM Lead`")
+        self.db.sql("INSERT INTO `tabCRM Lead` VALUES ('L2', 'agent', 'New', 0)")
+        self.a.commit()
+        with patch.object(frappe, "db", Database(self.b)):
+            count = eligibility.get_agent_fresh_lead_count("agent", "New", for_update=True)
+        self.assertEqual(count, 2)
+        self.b.rollback()

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+
 import frappe
 from frappe.utils import add_to_date, cint, now_datetime
 
@@ -465,12 +467,26 @@ def repair_assignment_helpers() -> None:
 def bulk_assign(leads: list[str], new_owner: str, reason: str | None = None) -> dict:
 	from new_assignement_system.engine.service import assign_lead
 
+	# This background job owns the transaction. Release every lead's locks before
+	# taking the next, and restart the whole attempt after a database rollback.
 	updated = 0
+	skipped = 0
 	for lead in leads:
-		assign_lead(lead, new_owner, reason=reason or "Bulk assignment", triggered_by="Bulk", ignore_permissions=True)
-		updated += 1
-	frappe.db.commit()
-	return {"status": "ok", "updated": updated}
+		for attempt in range(3):
+			try:
+				result = assign_lead(lead, new_owner, reason=reason or "Bulk assignment", triggered_by="Bulk", ignore_permissions=True)
+				frappe.db.commit()
+				break
+			except (AssignmentBusy, frappe.QueryDeadlockError, frappe.QueryTimeoutError):
+				frappe.db.rollback()
+				if attempt == 2:
+					raise
+				time.sleep(0.2 * (attempt + 1))
+		if result.get("status") == "skipped":
+			skipped += 1
+		else:
+			updated += 1
+	return {"status": "ok", "updated": updated, "skipped": skipped}
 
 
 def bulk_clear(leads: list[str], reason: str | None = None) -> dict:

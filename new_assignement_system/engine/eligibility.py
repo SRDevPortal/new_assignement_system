@@ -305,7 +305,7 @@ def get_agent_fresh_lead_count(agent: str, fresh_status: str | None = None, *, f
 			select name
 			from `tabCRM Lead`
 			where {" and ".join(conditions)}
-			for update
+			for update nowait
 			""",
 			filters,
 		)
