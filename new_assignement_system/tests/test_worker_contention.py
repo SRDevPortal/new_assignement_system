@@ -10,6 +10,38 @@ from new_assignement_system.engine.contention import AssignmentBusy
 
 
 class WorkerContentionTests(TestCase):
+    def test_busy_lead_is_deferred_before_any_processing_update(self):
+        for error in (frappe.QueryTimeoutError, frappe.QueryDeadlockError):
+            events = []
+            db = MagicMock()
+            db.exists.return_value = True
+            db.rollback.side_effect = lambda: events.append("rollback")
+            row = frappe._dict(name="Q", lead="L", event_type="Insert", attempts=1)
+            with patch.object(frappe, "db", db), \
+                 patch.object(jobs, "try_lock", return_value=row), \
+                 patch.object(jobs, "get_lead_context", side_effect=error()) as lock, \
+                 patch.object(jobs, "set_assignment_state") as state, \
+                 patch.object(jobs, "auto_assign_lead") as assign, \
+                 patch.object(jobs, "mark_retry", side_effect=lambda *a, **k: events.append("retry")) as retry:
+                jobs.process_assignment_queue_item("Q")
+            lock.assert_called_once_with("L", for_update=True)
+            state.assert_not_called()
+            assign.assert_not_called()
+            self.assertEqual(events, ["rollback", "retry"])
+            self.assertTrue(retry.call_args.kwargs["busy"])
+
+    def test_retry_record_contention_leaves_competing_claim_untouched(self):
+        db = MagicMock()
+        row = frappe._dict(name="Q", lead="L", event_type="Insert", attempts=1)
+        with patch.object(frappe, "db", db), \
+             patch.object(jobs, "try_lock", return_value=row), \
+             patch.object(jobs, "get_lead_context", side_effect=frappe.QueryTimeoutError()), \
+             patch.object(jobs, "mark_retry", side_effect=frappe.QueryTimeoutError()):
+            self.assertIsNone(jobs.process_assignment_queue_item("Q"))
+        self.assertEqual(db.rollback.call_count, 2)
+        db.commit.assert_not_called()
+        db.set_value.assert_not_called()
+
     def test_maintenance_routes_to_provisioned_pool_and_falls_back_safely(self):
         for known, expected in (({'short':300},'short'),({'short':300,'assignment':300},'assignment')):
             with patch.object(jobs,'get_settings',return_value=frappe._dict(enabled=1,default_queue='short',scheduler_queue='assignment')), \

@@ -6,6 +6,13 @@ is a read-only plan. No arbitrary SQL/table/index identifiers are accepted.
 import frappe
 
 TARGETS = {
+    'call_uuid': ('tabVobiz Call Log', 'idx_vobiz_uuid_start', ('call_uuid', 'start_time')),
+    'call_b_leg_uuid': ('tabVobiz Call Log', 'idx_vobiz_bleg_start', ('b_leg_uuid', 'start_time')),
+    'assignment_team': ('tabNew Assignement System Log', 'idx_nas_team', ('team',)),
+    'lead_duplicate': ('tabCRM Lead', 'idx_nas_duplicate_of', ('sr_duplicate_of',)),
+    'lead_chat_access': ('tabCRM Lead', 'idx_wa_owner_pipeline', ('lead_owner', 'sr_lead_pipeline')),
+    'chat_lead': ('tabChat Conversation', 'idx_wa_linked_lead', ('linked_crm_lead',)),
+    'chat_reference': ('tabChat Conversation', 'idx_wa_linked_reference', ('linked_reference_doctype', 'linked_reference_name')),
     'lead_capacity': ('tabCRM Lead', 'idx_nas_owner_status_converted',
                       ('lead_owner', 'status', 'converted')),
     'assignment': ('tabNew Assignement System Log', 'idx_nas_rule_owner_status_action_created',
@@ -16,7 +23,7 @@ TARGETS = {
 
 
 def install(target='assignment', apply=False):
-    if target not in TARGETS:
+    if not isinstance(target, str) or target not in TARGETS:
         raise ValueError('Unknown index target: ' + str(target))
     if not isinstance(apply, bool):
         raise ValueError('apply must be a JSON boolean')
@@ -30,10 +37,16 @@ def install(target='assignment', apply=False):
     expected = [(column, None) for column in columns]
     if name in definitions and definitions[name] != expected:
         raise ValueError('Existing index name has a different definition; DBA review required')
-    if expected in definitions.values():
+    if any(definition[:len(expected)] == expected for definition in definitions.values()):
         return {'target':target,'status':'already_present'}
     if not rows:
         raise ValueError('Required table is absent; install the owning app first')
+    present = {row.COLUMN_NAME for row in frappe.db.sql(
+        'SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=%s',
+        (table,), as_dict=True)}
+    missing = set(columns) - present
+    if missing:
+        raise ValueError('Required columns are absent: ' + ', '.join(sorted(missing)))
     query = 'ALTER TABLE `'+table+'` ADD INDEX `'+name+'` ('+', '.join('`'+c+'`' for c in columns)+'), ALGORITHM=INPLACE, LOCK=NONE'
     if not apply:
         return {'target':target,'status':'planned','sql':query}

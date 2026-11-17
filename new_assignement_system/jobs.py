@@ -41,7 +41,7 @@ def enqueue_scheduler_maintenance() -> None:
 def process_assignment_queue_item(queue_name: str) -> dict | None:
 	try:
 		row = try_lock(queue_name)
-	except frappe.QueryTimeoutError:
+	except (frappe.QueryTimeoutError, frappe.QueryDeadlockError):
 		# NOWAIT contention: the owning job or the due-work scanner handles it.
 		frappe.db.rollback()
 		return None
@@ -59,6 +59,12 @@ def process_assignment_queue_item(queue_name: str) -> dict | None:
 		return {"status": "cancelled", "reason": "lead_missing"}
 
 	try:
+		# Claim the lead before the first UPDATE. Otherwise even the Processing
+		# marker can occupy a worker for the full InnoDB lock timeout.
+		try:
+			get_lead_context(row.lead, for_update=True)
+		except (frappe.QueryTimeoutError, frappe.QueryDeadlockError) as exc:
+			raise AssignmentBusy("Lead is being updated; retry later") from exc
 		set_assignment_state(row.lead, "Processing", reason=f"Processing {row.event_type}", increment_attempts=True)
 		if row.event_type == "Unassign":
 			result = auto_unassign_lead(row.lead, event_type=row.event_type, queue=queue_name)
@@ -98,8 +104,13 @@ def process_assignment_queue_item(queue_name: str) -> dict | None:
 	except Exception as exc:
 		error = frappe.get_traceback()
 		frappe.db.rollback()
-		mark_retry(queue_name, error, row.attempts, claim=row, busy=isinstance(exc, AssignmentBusy))
-		frappe.db.commit()
+		try:
+			mark_retry(queue_name, error, row.attempts, claim=row, busy=isinstance(exc, AssignmentBusy))
+			frappe.db.commit()
+		except (frappe.QueryTimeoutError, frappe.QueryDeadlockError):
+			# The rollback restored the previous queue state. The competing owner
+			# or due-work scanner will handle it; never overwrite its claim.
+			frappe.db.rollback()
 		return None
 
 
