@@ -1,0 +1,40 @@
+{
+ "doctype": "DocType",
+ "name": "Assignment Reconciliation",
+ "module": "New Assignement System",
+ "engine": "InnoDB",
+ "autoname": "field:lead",
+ "field_order": [
+  "lead",
+  "revision",
+  "due_at"
+ ],
+ "fields": [
+  {
+   "fieldname": "lead",
+   "fieldtype": "Data",
+   "label": "Lead",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "revision",
+   "fieldtype": "Int",
+   "label": "Revision",
+   "default": "1"
+  },
+  {
+   "fieldname": "due_at",
+   "fieldtype": "Datetime",
+   "label": "Due At",
+   "search_index": 1
+  }
+ ],
+ "permissions": [
+  {
+   "role": "System Manager",
+   "read": 1
+  }
+ ],
+ "track_changes": 0
+}

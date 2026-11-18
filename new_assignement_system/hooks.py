@@ -60,3 +60,7 @@ fixtures = [
 	{"dt": "Custom Field", "filters": [["module", "=", "New Assignement System"]]},
 	{"dt": "Property Setter", "filters": [["module", "=", "New Assignement System"]]},
 ]
+
+# Same-transaction capture, including bulk writers in crm_lead_dedupe.
+crm_lead_dedupe_state_changed = ["new_assignement_system.maintenance.reconciliation.mark_leads"]
+doc_events["CRM Lead"]["on_update"].append("new_assignement_system.maintenance.reconciliation.on_lead_update")

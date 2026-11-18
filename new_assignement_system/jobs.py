@@ -137,8 +137,12 @@ def release_assignment_waiting_leads(limit: int | None = None) -> int:
 		return 0
 
 	limit = int(limit or settings.queue_batch_size or 100)
-	_reconcile_assigned_duplicates(limit)
-	_reconcile_owned_primary_states(limit)
+	if cint(frappe.conf.get("nas_incremental_reconciliation")):
+		from new_assignement_system.maintenance.reconciliation import process_due
+		process_due(limit)
+	else:
+		_reconcile_assigned_duplicates(limit)
+		_reconcile_owned_primary_states(limit)
 	rows = frappe.db.sql(
 		"""
 		select name

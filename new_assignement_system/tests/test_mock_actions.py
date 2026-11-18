@@ -60,7 +60,7 @@ class TestAssignmentMockActions(TestCase):
 		db.has_column.return_value = True
 		db.sql.return_value = [row]
 		db.exists.return_value = True
-		fake_frappe = SimpleNamespace(db=db)
+		fake_frappe = SimpleNamespace(db=db, conf={})
 		with (
 			patch("new_assignement_system.jobs.get_settings", return_value=settings()),
 			patch("new_assignement_system.jobs.now_datetime", return_value=datetime(2026, 8, 3, 12, 0, 0)),
@@ -85,7 +85,7 @@ class TestAssignmentMockActions(TestCase):
 		db = MagicMock()
 		db.has_column.return_value = True
 		db.sql.return_value = [frappe._dict(name="MOCK-LEAD-OWNED")]
-		fake_frappe = SimpleNamespace(db=db)
+		fake_frappe = SimpleNamespace(db=db, conf={})
 		with (
 			patch("new_assignement_system.jobs.frappe", fake_frappe),
 			patch("new_assignement_system.jobs.set_assignment_state") as set_state,
